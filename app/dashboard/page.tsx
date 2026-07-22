@@ -2,33 +2,18 @@
 
 import { useEffect, useState, useRef } from "react";
 
-interface Project {
-  key: string;
-  name: string;
-}
-
+interface Project { key: string; name: string; }
 interface Issue {
-  key: string;
-  summary: string;
-  status: string;
-  project: string;
-  issueType: string;
-  parentKey: string | null;
-  parentSummary: string | null;
+  key: string; summary: string; status: string;
+  project: string; issueType: string;
+  parentKey: string | null; parentSummary: string | null;
 }
-
 interface Entry {
-  issueKey: string;
-  summary: string;
-  hours: number;
-  minutes: number;
-  comment: string;
+  issueKey: string; summary: string;
+  hours: number; minutes: number; comment: string;
 }
-
 interface Group {
-  parentKey: string | null;
-  parentSummary: string | null;
-  issues: Issue[];
+  parentKey: string | null; parentSummary: string | null; issues: Issue[];
 }
 
 const JORNADA_HORAS = 8;
@@ -53,65 +38,48 @@ const ISSUE_TYPE_STYLES: Record<string, { bg: string; text: string; emoji: strin
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const colors = STATUS_COLORS[status] || { bg: "bg-gray-100", text: "text-gray-600", dot: "bg-gray-400" };
+  const c = STATUS_COLORS[status] || { bg: "bg-gray-100", text: "text-gray-600", dot: "bg-gray-400" };
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${colors.bg} ${colors.text}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
-      {status}
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${c.bg} ${c.text}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />{status}
     </span>
   );
 }
 
 function IssueTypeBadge({ type }: { type: string }) {
-  const style = ISSUE_TYPE_STYLES[type] || { bg: "bg-gray-100", text: "text-gray-600", emoji: "📄" };
+  const s = ISSUE_TYPE_STYLES[type] || { bg: "bg-gray-100", text: "text-gray-600", emoji: "📄" };
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${style.bg} ${style.text}`}>
-      {style.emoji} {type}
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${s.bg} ${s.text}`}>
+      {s.emoji} {type}
     </span>
   );
 }
 
-function ProjectSelector({ projects, value, onChange }: {
-  projects: Project[];
-  value: string;
-  onChange: (key: string) => void;
-}) {
+function ProjectSelector({ projects, value, onChange }: { projects: Project[]; value: string; onChange: (k: string) => void }) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-
   const selected = projects.find(p => p.key === value);
   const filtered = projects.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
     p.key.toLowerCase().includes(search.toLowerCase())
   );
-
   useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
   }, []);
-
   return (
     <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-      >
+      <button onClick={() => setOpen(!open)}
+        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
         {selected ? (
-          <span className="text-gray-900">
-            {selected.name} <span className="text-blue-500 font-mono font-semibold">({selected.key})</span>
-          </span>
-        ) : (
-          <span className="text-gray-400">— Elegí un proyecto —</span>
-        )}
+          <span className="text-gray-900">{selected.name} <span className="text-blue-500 font-mono font-semibold">({selected.key})</span></span>
+        ) : <span className="text-gray-400">— Elegí un proyecto —</span>}
         <svg className={`w-4 h-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
-
       {open && (
         <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
           <div className="p-2 border-b border-gray-100">
@@ -119,26 +87,16 @@ function ProjectSelector({ projects, value, onChange }: {
               <svg className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
-              <input
-                autoFocus
-                type="text"
-                placeholder="Buscar proyecto..."
-                value={search}
+              <input autoFocus type="text" placeholder="Buscar proyecto..." value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
           </div>
           <div className="max-h-56 overflow-y-auto">
-            {filtered.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">Sin resultados</p>
-            ) : (
+            {filtered.length === 0 ? <p className="text-sm text-gray-400 text-center py-4">Sin resultados</p> : (
               filtered.map(p => (
-                <button
-                  key={p.key}
-                  onClick={() => { onChange(p.key); setOpen(false); setSearch(""); }}
-                  className={`w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 transition-colors flex items-center justify-between ${value === p.key ? "bg-blue-50" : ""}`}
-                >
+                <button key={p.key} onClick={() => { onChange(p.key); setOpen(false); setSearch(""); }}
+                  className={`w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 transition-colors flex items-center justify-between ${value === p.key ? "bg-blue-50" : ""}`}>
                   <span className="text-gray-900 truncate">{p.name}</span>
                   <span className="text-blue-500 font-mono text-xs font-semibold ml-2 flex-shrink-0">{p.key}</span>
                 </button>
@@ -151,22 +109,86 @@ function ProjectSelector({ projects, value, onChange }: {
   );
 }
 
+function EpicGroup({ group, entries, onAdd }: { group: Group; entries: Entry[]; onAdd: (issue: Issue) => void }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const isEpic = !!group.parentKey;
+
+  return (
+    <div className="mb-3">
+      {/* Header colapsable */}
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors text-left ${isEpic ? "hover:bg-purple-50" : "hover:bg-gray-50"}`}
+      >
+        {/* Flecha */}
+        <svg className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${collapsed ? "-rotate-90" : ""} ${isEpic ? "text-purple-400" : "text-gray-300"}`}
+          fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+
+        {isEpic ? (
+          <>
+            <span className="text-purple-500 text-sm">⚡</span>
+            <span className="text-xs font-semibold text-gray-700 truncate flex-1">{group.parentSummary}</span>
+            <span className="text-xs text-purple-400 font-mono flex-shrink-0">{group.parentKey}</span>
+          </>
+        ) : (
+          <span className="text-xs font-semibold text-gray-400 flex-1">Sin épica</span>
+        )}
+
+        <span className={`text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 ${isEpic ? "bg-purple-100 text-purple-600" : "bg-gray-100 text-gray-500"}`}>
+          {group.issues.length}
+        </span>
+      </button>
+
+      {/* Tickets con árbol visual */}
+      {!collapsed && (
+        <div className="ml-3 mt-1 relative">
+          {/* Línea vertical */}
+          <div className={`absolute left-0 top-0 bottom-2 w-px ${isEpic ? "bg-purple-200" : "bg-gray-200"}`} />
+
+          <div className="space-y-1.5 pl-4">
+            {group.issues.map((issue, idx) => {
+              const added = entries.some(e => e.issueKey === issue.key);
+              const isLast = idx === group.issues.length - 1;
+              return (
+                <div key={issue.key} className="relative">
+                  {/* Línea horizontal de conexión */}
+                  <div className={`absolute -left-4 top-1/2 w-3 h-px ${isEpic ? "bg-purple-200" : "bg-gray-200"}`} />
+                  {/* Nodo */}
+                  <div className={`absolute -left-[18px] top-1/2 -translate-y-1/2 w-2 h-2 rounded-full border ${isEpic ? "border-purple-300 bg-white" : "border-gray-300 bg-white"}`} />
+
+                  <div className={`flex items-center justify-between p-3 rounded-xl border transition-all ${added ? "border-blue-200 bg-blue-50" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50"}`}>
+                    <div className="min-w-0 flex-1 mr-3">
+                      <p className={`text-sm font-medium truncate ${added ? "text-blue-800" : "text-gray-900"}`}>{issue.summary}</p>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span className="text-xs font-mono font-semibold text-blue-500">{issue.key}</span>
+                        <IssueTypeBadge type={issue.issueType} />
+                        <StatusBadge status={issue.status} />
+                      </div>
+                    </div>
+                    <button onClick={() => onAdd(issue)} disabled={added}
+                      className={`flex-shrink-0 text-sm font-medium px-3 py-1.5 rounded-lg transition-all ${added ? "text-blue-400 bg-blue-100 cursor-default" : "text-blue-600 hover:bg-blue-50 border border-blue-200"}`}>
+                      {added ? "✓" : "+ Agregar"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function groupIssues(issues: Issue[]): Group[] {
   const groups: Record<string, Group> = {};
-
   for (const issue of issues) {
     const key = issue.parentKey || "__none__";
-    if (!groups[key]) {
-      groups[key] = {
-        parentKey: issue.parentKey,
-        parentSummary: issue.parentSummary,
-        issues: [],
-      };
-    }
+    if (!groups[key]) groups[key] = { parentKey: issue.parentKey, parentSummary: issue.parentSummary, issues: [] };
     groups[key].issues.push(issue);
   }
-
-  // Épicas primero, sin parent al final
   return Object.values(groups).sort((a, b) => {
     if (a.parentKey === null) return 1;
     if (b.parentKey === null) return -1;
@@ -176,7 +198,7 @@ function groupIssues(issues: Issue[]): Group[] {
 
 export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProject, setSelectedProject] = useState<string>("");
+  const [selectedProject, setSelectedProject] = useState("");
   const [issues, setIssues] = useState<Issue[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
@@ -199,7 +221,6 @@ export default function Dashboard() {
     const res = await fetch("/api/auth/me");
     if (res.ok) { const data = await res.json(); setUser(data.user); }
   };
-
   const fetchProjects = async () => {
     setLoadingProjects(true);
     const res = await fetch("/api/jira/issues");
@@ -208,7 +229,6 @@ export default function Dashboard() {
     setProjects(data.projects || []);
     setLoadingProjects(false);
   };
-
   const fetchIssues = async (projectKey: string) => {
     setLoadingIssues(true);
     const res = await fetch(`/api/jira/issues?project=${projectKey}`);
@@ -216,17 +236,13 @@ export default function Dashboard() {
     setIssues(data.issues || []);
     setLoadingIssues(false);
   };
-
   const addEntry = (issue: Issue) => {
-    if (entries.find((e) => e.issueKey === issue.key)) return;
+    if (entries.find(e => e.issueKey === issue.key)) return;
     setEntries([...entries, { issueKey: issue.key, summary: issue.summary, hours: 0, minutes: 0, comment: "" }]);
   };
-
-  const updateEntry = (issueKey: string, field: keyof Entry, value: string | number) => {
-    setEntries(entries.map((e) => (e.issueKey === issueKey ? { ...e, [field]: value } : e)));
-  };
-
-  const removeEntry = (issueKey: string) => setEntries(entries.filter((e) => e.issueKey !== issueKey));
+  const updateEntry = (issueKey: string, field: keyof Entry, value: string | number) =>
+    setEntries(entries.map(e => e.issueKey === issueKey ? { ...e, [field]: value } : e));
+  const removeEntry = (issueKey: string) => setEntries(entries.filter(e => e.issueKey !== issueKey));
 
   const totalHoras = entries.reduce((acc, e) => acc + e.hours + e.minutes / 60, 0);
   const porcentaje = Math.min((totalHoras / JORNADA_HORAS) * 100, 100);
@@ -236,7 +252,6 @@ export default function Dashboard() {
     i.summary.toLowerCase().includes(issueSearch.toLowerCase()) ||
     i.key.toLowerCase().includes(issueSearch.toLowerCase())
   );
-
   const groups = groupIssues(filteredIssues);
 
   const handleSubmit = async () => {
@@ -245,14 +260,11 @@ export default function Dashboard() {
     const res = await fetch("/api/jira/worklog", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ entries: entries.map((e) => ({ ...e, date })) }),
+      body: JSON.stringify({ entries: entries.map(e => ({ ...e, date })) }),
     });
     const data = await res.json();
-    if (data.errors?.length > 0) {
-      setError(`No se pudieron imputar: ${data.errors.map((e: any) => e.issueKey).join(", ")}`);
-    } else {
-      setSubmitted(true);
-    }
+    if (data.errors?.length > 0) setError(`No se pudieron imputar: ${data.errors.map((e: any) => e.issueKey).join(", ")}`);
+    else setSubmitted(true);
     setSubmitting(false);
   };
 
@@ -268,7 +280,8 @@ export default function Dashboard() {
           <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Horas imputadas!</h2>
           <p className="text-gray-500 mb-2">Registraste <span className="font-semibold text-gray-800">{totalHoras.toFixed(1)}h</span> en Jira.</p>
           <p className="text-sm text-gray-400 mb-8">{new Date(date + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}</p>
-          <button onClick={() => { setSubmitted(false); setEntries([]); }} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-xl transition-colors">
+          <button onClick={() => { setSubmitted(false); setEntries([]); }}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-xl transition-colors">
             Imputar otro día
           </button>
         </div>
@@ -308,12 +321,11 @@ export default function Dashboard() {
       </header>
 
       <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">
-        {/* Progreso */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
             <div>
               <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide block mb-1.5">Fecha de imputación</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              <input type="date" value={date} onChange={e => setDate(e.target.value)}
                 className="border border-gray-200 rounded-xl px-3 py-2 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div className="flex-1 sm:max-w-sm">
@@ -337,11 +349,10 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* Panel izquierdo */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
             <div>
               <h2 className="font-bold text-gray-900 text-base">Buscar tickets</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Agrupados por épica — excluye finalizados</p>
+              <p className="text-xs text-gray-400 mt-0.5">Agrupados por épica — click para colapsar</p>
             </div>
 
             <div>
@@ -351,9 +362,7 @@ export default function Dashboard() {
                   <div className="w-4 h-4 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
                   Cargando proyectos...
                 </div>
-              ) : (
-                <ProjectSelector projects={projects} value={selectedProject} onChange={setSelectedProject} />
-              )}
+              ) : <ProjectSelector projects={projects} value={selectedProject} onChange={setSelectedProject} />}
             </div>
 
             {selectedProject && (
@@ -362,12 +371,12 @@ export default function Dashboard() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
                 <input type="text" placeholder="Filtrar tickets..." value={issueSearch}
-                  onChange={(e) => setIssueSearch(e.target.value)}
+                  onChange={e => setIssueSearch(e.target.value)}
                   className="w-full border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             )}
 
-            <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
+            <div className="max-h-[480px] overflow-y-auto pr-1">
               {loadingIssues ? (
                 <div className="flex items-center justify-center gap-2 py-10 text-sm text-gray-400">
                   <div className="w-4 h-4 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
@@ -385,53 +394,18 @@ export default function Dashboard() {
               ) : filteredIssues.length === 0 ? (
                 <div className="text-center py-10 text-sm text-gray-400">No se encontraron tickets activos</div>
               ) : (
-                groups.map((group) => (
-                  <div key={group.parentKey || "__none__"}>
-                    {/* Header del grupo */}
-                    <div className="flex items-center gap-2 mb-1.5 px-1">
-                      {group.parentKey ? (
-                        <>
-                          <span className="text-purple-500 text-xs">⚡</span>
-                          <span className="text-xs font-semibold text-gray-500 truncate">{group.parentSummary}</span>
-                          <span className="text-xs text-purple-400 font-mono flex-shrink-0">{group.parentKey}</span>
-                        </>
-                      ) : (
-                        <span className="text-xs font-semibold text-gray-400">Sin épica</span>
-                      )}
-                    </div>
-
-                    {/* Tickets del grupo */}
-                    <div className="space-y-1.5 pl-3 border-l-2 border-gray-100">
-                      {group.issues.map((issue) => {
-                        const added = entries.some((e) => e.issueKey === issue.key);
-                        return (
-                          <div key={issue.key}
-                            className={`flex items-center justify-between p-3 rounded-xl border transition-all ${added ? "border-blue-200 bg-blue-50" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50"}`}
-                          >
-                            <div className="min-w-0 flex-1 mr-3">
-                              <p className={`text-sm font-medium truncate ${added ? "text-blue-800" : "text-gray-900"}`}>{issue.summary}</p>
-                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                                <span className="text-xs font-mono font-semibold text-blue-500">{issue.key}</span>
-                                <IssueTypeBadge type={issue.issueType} />
-                                <StatusBadge status={issue.status} />
-                              </div>
-                            </div>
-                            <button onClick={() => addEntry(issue)} disabled={added}
-                              className={`flex-shrink-0 text-sm font-medium px-3 py-1.5 rounded-lg transition-all ${added ? "text-blue-400 bg-blue-100 cursor-default" : "text-blue-600 hover:bg-blue-50 border border-blue-200"}`}
-                            >
-                              {added ? "✓" : "+ Agregar"}
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+                groups.map(group => (
+                  <EpicGroup
+                    key={group.parentKey || "__none__"}
+                    group={group}
+                    entries={entries}
+                    onAdd={addEntry}
+                  />
                 ))
               )}
             </div>
           </div>
 
-          {/* Panel derecho */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col">
             <div className="mb-4">
               <h2 className="font-bold text-gray-900 text-base">Horas del día</h2>
@@ -452,7 +426,7 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="flex-1 space-y-3 overflow-y-auto pr-1">
-                {entries.map((entry) => (
+                {entries.map(entry => (
                   <div key={entry.issueKey} className="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -469,18 +443,18 @@ export default function Dashboard() {
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-2 py-1.5">
                         <input type="number" min={0} max={24} value={entry.hours}
-                          onChange={(e) => updateEntry(entry.issueKey, "hours", parseInt(e.target.value) || 0)}
+                          onChange={e => updateEntry(entry.issueKey, "hours", parseInt(e.target.value) || 0)}
                           className="w-10 text-center text-sm font-semibold text-gray-900 focus:outline-none" />
                         <span className="text-xs text-gray-400">h</span>
                       </div>
                       <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-2 py-1.5">
                         <input type="number" min={0} max={59} step={15} value={entry.minutes}
-                          onChange={(e) => updateEntry(entry.issueKey, "minutes", parseInt(e.target.value) || 0)}
+                          onChange={e => updateEntry(entry.issueKey, "minutes", parseInt(e.target.value) || 0)}
                           className="w-10 text-center text-sm font-semibold text-gray-900 focus:outline-none" />
                         <span className="text-xs text-gray-400">min</span>
                       </div>
                       <input type="text" placeholder="Comentario (opcional)" value={entry.comment}
-                        onChange={(e) => updateEntry(entry.issueKey, "comment", e.target.value)}
+                        onChange={e => updateEntry(entry.issueKey, "comment", e.target.value)}
                         className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
                   </div>
@@ -488,11 +462,7 @@ export default function Dashboard() {
               </div>
             )}
 
-            {error && (
-              <div className="mt-3 p-3 bg-red-50 border border-red-100 rounded-xl">
-                <p className="text-sm text-red-600">{error}</p>
-              </div>
-            )}
+            {error && <div className="mt-3 p-3 bg-red-50 border border-red-100 rounded-xl"><p className="text-sm text-red-600">{error}</p></div>}
 
             {entries.length > 0 && (
               <button onClick={handleSubmit} disabled={submitting || totalHoras === 0}
