@@ -39,8 +39,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ projects });
     }
 
-    const jql = encodeURIComponent(`project = "${projectKey}" ORDER BY updated DESC`);
-    const url = `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,status,project&maxResults=100`;
+    // Excluir tickets finalizados + traer issuetype
+    const jql = encodeURIComponent(
+      `project = "${projectKey}" AND statusCategory != Done ORDER BY updated DESC`
+    );
+    const url = `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,status,project,issuetype&maxResults=100`;
 
     const response = await fetch(url, {
       headers: {
@@ -55,6 +58,7 @@ export async function GET(request: NextRequest) {
       summary: issue.fields.summary,
       status: issue.fields.status?.name,
       project: issue.fields.project?.name,
+      issueType: issue.fields.issuetype?.name || "Task",
     })) || [];
 
     return NextResponse.json({ issues });

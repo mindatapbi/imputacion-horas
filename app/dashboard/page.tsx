@@ -13,6 +13,7 @@ interface Issue {
   summary: string;
   status: string;
   project: string;
+  issueType: string;
 }
 
 interface Entry {
@@ -36,6 +37,14 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> =
   "Blocked":        { bg: "bg-red-100", text: "text-red-700", dot: "bg-red-500" },
 };
 
+const ISSUE_TYPE_STYLES: Record<string, { bg: string; text: string; emoji: string }> = {
+  "Epic":     { bg: "bg-purple-100", text: "text-purple-700", emoji: "⚡" },
+  "Story":    { bg: "bg-green-100",  text: "text-green-700",  emoji: "📗" },
+  "Task":     { bg: "bg-blue-100",   text: "text-blue-700",   emoji: "✅" },
+  "Sub-task": { bg: "bg-gray-100",   text: "text-gray-600",   emoji: "↳" },
+  "Bug":      { bg: "bg-red-100",    text: "text-red-700",    emoji: "🐛" },
+};
+
 function StatusBadge({ status }: { status: string }) {
   const colors = STATUS_COLORS[status] || { bg: "bg-gray-100", text: "text-gray-600", dot: "bg-gray-400" };
   return (
@@ -46,10 +55,18 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function IssueTypeBadge({ type }: { type: string }) {
+  const style = ISSUE_TYPE_STYLES[type] || { bg: "bg-gray-100", text: "text-gray-600", emoji: "📄" };
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${style.bg} ${style.text}`}>
+      {style.emoji} {type}
+    </span>
+  );
+}
+
 export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>("");
-  const [selectedProjectName, setSelectedProjectName] = useState<string>("");
   const [issues, setIssues] = useState<Issue[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
@@ -95,12 +112,6 @@ export default function Dashboard() {
     const data = await res.json();
     setIssues(data.issues || []);
     setLoadingIssues(false);
-  };
-
-  const handleProjectChange = (key: string) => {
-    setSelectedProject(key);
-    const proj = projects.find(p => p.key === key);
-    setSelectedProjectName(proj?.name || "");
   };
 
   const addEntry = (issue: Issue) => {
@@ -172,12 +183,11 @@ export default function Dashboard() {
 
   return (
     <main className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white border-b border-gray-100 px-6 py-3 sticky top-0 z-10 shadow-sm">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-sm shadow-blue-200">
-              <svg className="w-4.5 h-4.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{width:18,height:18}}>
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{width:18,height:18}}>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
@@ -205,7 +215,6 @@ export default function Dashboard() {
       </header>
 
       <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">
-
         {/* Fecha + progreso */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
@@ -215,11 +224,9 @@ export default function Dashboard() {
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="border border-gray-200 rounded-xl px-3 py-2 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="border border-gray-200 rounded-xl px-3 py-2 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-
-            {/* Barra de progreso */}
             <div className="flex-1 sm:max-w-sm">
               <div className="flex justify-between items-end mb-2">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Progreso del día</span>
@@ -245,15 +252,13 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-
           {/* Panel izquierdo */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
             <div>
               <h2 className="font-bold text-gray-900 text-base">Buscar tickets</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Elegí un proyecto y agregá los tickets del día</p>
+              <p className="text-xs text-gray-400 mt-0.5">Tickets activos — excluye los finalizados</p>
             </div>
 
-            {/* Selector de proyecto */}
             <div>
               <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide block mb-1.5">Proyecto</label>
               {loadingProjects ? (
@@ -265,8 +270,8 @@ export default function Dashboard() {
                 <div className="relative">
                   <select
                     value={selectedProject}
-                    onChange={(e) => handleProjectChange(e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white pr-8"
+                    onChange={(e) => setSelectedProject(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white pr-8"
                   >
                     <option value="">— Elegí un proyecto —</option>
                     {projects.map((p) => (
@@ -284,7 +289,6 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* Buscador */}
             {selectedProject && (
               <div className="relative">
                 <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -295,12 +299,11 @@ export default function Dashboard() {
                   placeholder="Filtrar tickets..."
                   value={issueSearch}
                   onChange={(e) => setIssueSearch(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             )}
 
-            {/* Lista de tickets */}
             <div className="space-y-1.5 max-h-96 overflow-y-auto pr-1">
               {loadingIssues ? (
                 <div className="flex items-center justify-center gap-2 py-10 text-sm text-gray-400">
@@ -317,7 +320,7 @@ export default function Dashboard() {
                   <p className="text-sm text-gray-400">Elegí un proyecto para ver sus tickets</p>
                 </div>
               ) : filteredIssues.length === 0 ? (
-                <div className="text-center py-10 text-sm text-gray-400">No se encontraron tickets</div>
+                <div className="text-center py-10 text-sm text-gray-400">No se encontraron tickets activos</div>
               ) : (
                 filteredIssues.map((issue) => {
                   const added = entries.some((e) => e.issueKey === issue.key);
@@ -325,17 +328,16 @@ export default function Dashboard() {
                     <div
                       key={issue.key}
                       className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
-                        added
-                          ? "border-blue-200 bg-blue-50"
-                          : "border-gray-100 hover:border-gray-200 hover:bg-gray-50"
+                        added ? "border-blue-200 bg-blue-50" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50"
                       }`}
                     >
                       <div className="min-w-0 flex-1 mr-3">
                         <p className={`text-sm font-medium truncate ${added ? "text-blue-800" : "text-gray-900"}`}>
                           {issue.summary}
                         </p>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                           <span className="text-xs font-mono font-semibold text-blue-500">{issue.key}</span>
+                          <IssueTypeBadge type={issue.issueType} />
                           <StatusBadge status={issue.status} />
                         </div>
                       </div>
@@ -348,7 +350,7 @@ export default function Dashboard() {
                             : "text-blue-600 hover:bg-blue-50 border border-blue-200 hover:border-blue-300"
                         }`}
                       >
-                        {added ? "✓ Agregado" : "+ Agregar"}
+                        {added ? "✓" : "+ Agregar"}
                       </button>
                     </div>
                   );
@@ -418,7 +420,7 @@ export default function Dashboard() {
                         placeholder="Comentario (opcional)"
                         value={entry.comment}
                         onChange={(e) => updateEntry(entry.issueKey, "comment", e.target.value)}
-                        className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
                   </div>
@@ -441,7 +443,7 @@ export default function Dashboard() {
                     ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                     : submitting
                     ? "bg-blue-400 text-white cursor-wait"
-                    : "bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-200 hover:shadow-md hover:shadow-blue-200"
+                    : "bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-200"
                 }`}
               >
                 {submitting ? (
