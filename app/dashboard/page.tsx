@@ -77,7 +77,7 @@ function ProjectSelector({ projects, value, onChange }: { projects: Project[]; v
 }
 
 function EpicGroup({ group, entries, onAdd }: { group: Group; entries: Entry[]; onAdd: (issue: Issue) => void }) {
-  const [collapsed, setCollapsed] = useState(true); // colapsado por defecto
+  const [collapsed, setCollapsed] = useState(true);
   const isEpic = !!group.parentKey;
   const addedCount = group.issues.filter(i => entries.some(e => e.issueKey === i.key)).length;
   return (
@@ -86,9 +86,8 @@ function EpicGroup({ group, entries, onAdd }: { group: Group; entries: Entry[]; 
         <svg className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${collapsed ? "-rotate-90" : ""} ${isEpic ? "text-purple-400" : "text-gray-300"}`} fill="currentColor" viewBox="0 0 20 20">
           <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
         </svg>
-        {isEpic ? (
-          <><span className="text-purple-500 text-sm">⚡</span><span className="text-xs font-semibold text-gray-700 truncate flex-1">{group.parentSummary}</span><span className="text-xs text-purple-400 font-mono flex-shrink-0">{group.parentKey}</span></>
-        ) : <span className="text-xs font-semibold text-gray-400 flex-1">Sin épica</span>}
+        {isEpic ? (<><span className="text-purple-500 text-sm">⚡</span><span className="text-xs font-semibold text-gray-700 truncate flex-1">{group.parentSummary}</span><span className="text-xs text-purple-400 font-mono flex-shrink-0">{group.parentKey}</span></>)
+          : <span className="text-xs font-semibold text-gray-400 flex-1">Sin épica</span>}
         <span className={`text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 ${addedCount > 0 ? "bg-blue-100 text-blue-600" : isEpic ? "bg-purple-100 text-purple-600" : "bg-gray-100 text-gray-500"}`}>
           {addedCount > 0 ? `${addedCount}/` : ""}{group.issues.length}
         </span>
@@ -126,12 +125,13 @@ function EpicGroup({ group, entries, onAdd }: { group: Group; entries: Entry[]; 
   );
 }
 
-function CalendarView({ userId }: { userId: string }) {
+function CalendarView({ onTodayHours }: { onTodayHours: (h: number) => void }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [dailyHours, setDailyHours] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
+  const today = now.toISOString().split("T")[0];
 
   const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
   const DAYS = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
@@ -141,7 +141,14 @@ function CalendarView({ userId }: { userId: string }) {
   const fetchCalendar = async () => {
     setLoading(true);
     const res = await fetch(`/api/jira/calendar?year=${year}&month=${month}`);
-    if (res.ok) { const data = await res.json(); setDailyHours(data.dailyHours || {}); }
+    if (res.ok) {
+      const data = await res.json();
+      setDailyHours(data.dailyHours || {});
+      // Notificar horas de hoy al padre solo si estamos en el mes actual
+      if (year === now.getFullYear() && month === now.getMonth() + 1) {
+        onTodayHours(data.dailyHours?.[today] || 0);
+      }
+    }
     setLoading(false);
   };
 
@@ -150,8 +157,6 @@ function CalendarView({ userId }: { userId: string }) {
 
   const firstDay = new Date(year, month - 1, 1).getDay();
   const daysInMonth = new Date(year, month, 0).getDate();
-  const today = new Date().toISOString().split("T")[0];
-
   const cells: (number | null)[] = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
   while (cells.length % 7 !== 0) cells.push(null);
 
@@ -167,19 +172,14 @@ function CalendarView({ userId }: { userId: string }) {
   };
 
   const totalHours = Object.values(dailyHours).reduce((a, b) => a + b, 0);
-  const workedDays = Object.keys(dailyHours).filter(d => {
-    const dow = new Date(d + "T12:00:00").getDay();
-    return dow !== 0 && dow !== 6;
-  }).length;
+  const workedDays = Object.keys(dailyHours).filter(d => { const dow = new Date(d + "T12:00:00").getDay(); return dow !== 0 && dow !== 6; }).length;
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
       <div className="flex items-center justify-between mb-5">
         <div>
           <h2 className="font-bold text-gray-900 text-base">Calendario de imputaciones</h2>
-          <p className="text-xs text-gray-400 mt-0.5">
-            {loading ? "Cargando..." : `${workedDays} días imputados · ${totalHours.toFixed(1)}h totales`}
-          </p>
+          <p className="text-xs text-gray-400 mt-0.5">{loading ? "Cargando..." : `${workedDays} días imputados · ${totalHours.toFixed(1)}h totales`}</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
@@ -191,28 +191,22 @@ function CalendarView({ userId }: { userId: string }) {
           </button>
         </div>
       </div>
-
-      {/* Leyenda */}
       <div className="flex items-center gap-4 mb-4 text-xs text-gray-500">
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-400" />Completo (≥7.2h)</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-orange-400" />Parcial</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-200" />Sin imputar</span>
       </div>
-
-      {/* Grid */}
       <div className="grid grid-cols-7 gap-1">
-        {DAYS.map(d => (
-          <div key={d} className="text-center text-xs font-semibold text-gray-400 py-1">{d}</div>
-        ))}
+        {DAYS.map(d => <div key={d} className="text-center text-xs font-semibold text-gray-400 py-1">{d}</div>)}
         {cells.map((day, idx) => {
           if (!day) return <div key={`e-${idx}`} />;
           const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-          const dayOfWeek = (idx) % 7;
+          const dayOfWeek = idx % 7;
           const { bg, text, bar, label } = getDayColor(dateStr, dayOfWeek);
           const isToday = dateStr === today;
           return (
             <div key={dateStr} className={`relative rounded-xl p-2 ${bg} ${isToday ? "ring-2 ring-blue-400 ring-offset-1" : ""} min-h-[56px] flex flex-col`}>
-              <span className={`text-xs font-semibold ${text} ${isToday ? "text-blue-600" : ""}`}>{day}</span>
+              <span className={`text-xs font-semibold ${isToday ? "text-blue-600" : text}`}>{day}</span>
               {bar && (
                 <div className="mt-auto">
                   <div className={`h-1 rounded-full ${bar} mt-1`} style={{ width: `${Math.min((dailyHours[dateStr] || 0) / JORNADA_HORAS * 100, 100)}%` }} />
@@ -253,6 +247,7 @@ export default function Dashboard() {
   const [error, setError] = useState("");
   const [user, setUser] = useState<{ accountId: string; displayName: string; email: string; avatarUrl: string } | null>(null);
   const [issueSearch, setIssueSearch] = useState("");
+  const [alreadyLoggedToday, setAlreadyLoggedToday] = useState(0); // horas ya imputadas hoy
 
   useEffect(() => { fetchUser(); fetchProjects(); }, []);
   useEffect(() => { if (selectedProject) fetchIssues(selectedProject); else setIssues([]); setIssueSearch(""); }, [selectedProject]);
@@ -269,9 +264,11 @@ export default function Dashboard() {
   const updateEntry = (issueKey: string, field: keyof Entry, value: string | number) => setEntries(entries.map(e => e.issueKey === issueKey ? { ...e, [field]: value } : e));
   const removeEntry = (issueKey: string) => setEntries(entries.filter(e => e.issueKey !== issueKey));
 
-  const totalHoras = entries.reduce((acc, e) => acc + e.hours + e.minutes / 60, 0);
+  const newHoras = entries.reduce((acc, e) => acc + e.hours + e.minutes / 60, 0);
+  const totalHoras = alreadyLoggedToday + newHoras;
   const porcentaje = Math.min((totalHoras / JORNADA_HORAS) * 100, 100);
   const llegaObjetivo = totalHoras >= OBJETIVO_HORAS;
+
   const filteredIssues = issues.filter(i => i.summary.toLowerCase().includes(issueSearch.toLowerCase()) || i.key.toLowerCase().includes(issueSearch.toLowerCase()));
   const groups = groupIssues(filteredIssues);
 
@@ -280,7 +277,7 @@ export default function Dashboard() {
     const res = await fetch("/api/jira/worklog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries: entries.map(e => ({ ...e, date })) }) });
     const data = await res.json();
     if (data.errors?.length > 0) setError(`No se pudieron imputar: ${data.errors.map((e: any) => e.issueKey).join(", ")}`);
-    else setSubmitted(true);
+    else { setSubmitted(true); setAlreadyLoggedToday(prev => prev + newHoras); }
     setSubmitting(false);
   };
 
@@ -292,9 +289,10 @@ export default function Dashboard() {
             <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Horas imputadas!</h2>
-          <p className="text-gray-500 mb-2">Registraste <span className="font-semibold text-gray-800">{totalHoras.toFixed(1)}h</span> en Jira.</p>
-          <p className="text-sm text-gray-400 mb-8">{new Date(date + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}</p>
-          <button onClick={() => { setSubmitted(false); setEntries([]); }} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-xl transition-colors">Imputar otro día</button>
+          <p className="text-gray-500 mb-2">Registraste <span className="font-semibold text-gray-800">{newHoras.toFixed(1)}h</span> en Jira.</p>
+          <p className="text-sm text-gray-400 mb-2">{new Date(date + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}</p>
+          {alreadyLoggedToday + newHoras >= OBJETIVO_HORAS && <p className="text-green-600 font-semibold text-sm mb-6">✓ Completaste el objetivo del día</p>}
+          <button onClick={() => { setSubmitted(false); setEntries([]); }} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-xl transition-colors">Imputar más horas</button>
         </div>
       </main>
     );
@@ -336,18 +334,24 @@ export default function Dashboard() {
                   <span className="text-gray-300 text-sm font-medium"> / {JORNADA_HORAS}h</span>
                 </div>
               </div>
-              <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full transition-all duration-500 ${llegaObjetivo ? "bg-gradient-to-r from-green-400 to-green-500" : "bg-gradient-to-r from-orange-300 to-orange-500"}`} style={{ width: `${porcentaje}%` }} />
+              {/* Barra compuesta: ya imputadas + nuevas */}
+              <div className="h-3 bg-gray-100 rounded-full overflow-hidden flex">
+                <div className={`h-full transition-all duration-500 ${llegaObjetivo ? "bg-green-500" : "bg-green-400"}`}
+                  style={{ width: `${Math.min((alreadyLoggedToday / JORNADA_HORAS) * 100, 100)}%` }} />
+                <div className="h-full bg-blue-400 transition-all duration-500"
+                  style={{ width: `${Math.min((newHoras / JORNADA_HORAS) * 100, 100 - (alreadyLoggedToday / JORNADA_HORAS) * 100)}%` }} />
               </div>
-              <div className="flex justify-between mt-1.5">
-                <p className="text-xs text-gray-400">Objetivo: {OBJETIVO_HORAS}h (90% de la jornada)</p>
-                {llegaObjetivo && <p className="text-xs text-green-600 font-medium">✓ Completado</p>}
+              <div className="flex justify-between mt-1.5 flex-wrap gap-1">
+                <div className="flex items-center gap-3 text-xs text-gray-400">
+                  {alreadyLoggedToday > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-400" />{alreadyLoggedToday.toFixed(1)}h ya imputadas</span>}
+                  {newHoras > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400" />{newHoras.toFixed(1)}h nuevas</span>}
+                </div>
+                {llegaObjetivo ? <p className="text-xs text-green-600 font-medium">✓ Objetivo cumplido</p> : <p className="text-xs text-gray-400">Objetivo: {OBJETIVO_HORAS}h</p>}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Paneles */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* Izquierdo */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
@@ -398,15 +402,15 @@ export default function Dashboard() {
             )}
             {error && <div className="mt-3 p-3 bg-red-50 border border-red-100 rounded-xl"><p className="text-sm text-red-600">{error}</p></div>}
             {entries.length > 0 && (
-              <button onClick={handleSubmit} disabled={submitting || totalHoras === 0} className={`mt-4 w-full font-semibold py-3 rounded-xl transition-all text-sm ${totalHoras === 0 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : submitting ? "bg-blue-400 text-white cursor-wait" : "bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-200"}`}>
-                {submitting ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Imputando en Jira...</span> : `Imputar ${totalHoras.toFixed(1)}h en Jira →`}
+              <button onClick={handleSubmit} disabled={submitting || newHoras === 0} className={`mt-4 w-full font-semibold py-3 rounded-xl transition-all text-sm ${newHoras === 0 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : submitting ? "bg-blue-400 text-white cursor-wait" : "bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-200"}`}>
+                {submitting ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Imputando en Jira...</span> : `Imputar ${newHoras.toFixed(1)}h en Jira →`}
               </button>
             )}
           </div>
         </div>
 
         {/* Calendario */}
-        {user && <CalendarView userId={user.accountId} />}
+        <CalendarView onTodayHours={setAlreadyLoggedToday} />
       </div>
     </main>
   );
