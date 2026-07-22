@@ -24,32 +24,24 @@ export async function GET(request: NextRequest) {
       const response = await fetch(
         `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/project/search?maxResults=100&orderBy=name`,
         {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: "application/json",
-          },
+          headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
         }
       );
       const data = await response.json();
       const projects = data.values?.map((p: any) => ({
         key: p.key,
         name: p.name,
-        avatarUrl: p.avatarUrls?.["24x24"] || "",
       })) || [];
       return NextResponse.json({ projects });
     }
 
-    // Excluir tickets finalizados + traer issuetype
     const jql = encodeURIComponent(
-      `project = "${projectKey}" AND statusCategory != Done ORDER BY updated DESC`
+      `project = "${projectKey}" AND statusCategory != Done ORDER BY issuetype ASC, updated DESC`
     );
-    const url = `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,status,project,issuetype&maxResults=100`;
+    const url = `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,status,project,issuetype,parent&maxResults=100`;
 
     const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-      },
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
     });
 
     const data = await response.json();
@@ -59,6 +51,8 @@ export async function GET(request: NextRequest) {
       status: issue.fields.status?.name,
       project: issue.fields.project?.name,
       issueType: issue.fields.issuetype?.name || "Task",
+      parentKey: issue.fields.parent?.key || null,
+      parentSummary: issue.fields.parent?.fields?.summary || null,
     })) || [];
 
     return NextResponse.json({ issues });
