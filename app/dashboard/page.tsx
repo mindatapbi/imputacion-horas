@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import Link from "next/link";
 
 interface Project { key: string; name: string; }
 interface Issue {
@@ -132,7 +133,6 @@ function CalendarView({ onTodayHours }: { onTodayHours: (h: number) => void }) {
   const [dailyHours, setDailyHours] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
   const today = now.toISOString().split("T")[0];
-
   const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
   const DAYS = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
 
@@ -144,7 +144,6 @@ function CalendarView({ onTodayHours }: { onTodayHours: (h: number) => void }) {
     if (res.ok) {
       const data = await res.json();
       setDailyHours(data.dailyHours || {});
-      // Notificar horas de hoy al padre solo si estamos en el mes actual
       if (year === now.getFullYear() && month === now.getMonth() + 1) {
         onTodayHours(data.dailyHours?.[today] || 0);
       }
@@ -247,7 +246,7 @@ export default function Dashboard() {
   const [error, setError] = useState("");
   const [user, setUser] = useState<{ accountId: string; displayName: string; email: string; avatarUrl: string } | null>(null);
   const [issueSearch, setIssueSearch] = useState("");
-  const [alreadyLoggedToday, setAlreadyLoggedToday] = useState(0); // horas ya imputadas hoy
+  const [alreadyLoggedToday, setAlreadyLoggedToday] = useState(0);
 
   useEffect(() => { fetchUser(); fetchProjects(); }, []);
   useEffect(() => { if (selectedProject) fetchIssues(selectedProject); else setIssues([]); setIssueSearch(""); }, [selectedProject]);
@@ -291,7 +290,7 @@ export default function Dashboard() {
           <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Horas imputadas!</h2>
           <p className="text-gray-500 mb-2">Registraste <span className="font-semibold text-gray-800">{newHoras.toFixed(1)}h</span> en Jira.</p>
           <p className="text-sm text-gray-400 mb-2">{new Date(date + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}</p>
-          {alreadyLoggedToday + newHoras >= OBJETIVO_HORAS && <p className="text-green-600 font-semibold text-sm mb-6">✓ Completaste el objetivo del día</p>}
+          {totalHoras >= OBJETIVO_HORAS && <p className="text-green-600 font-semibold text-sm mb-6">✓ Completaste el objetivo del día</p>}
           <button onClick={() => { setSubmitted(false); setEntries([]); }} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-xl transition-colors">Imputar más horas</button>
         </div>
       </main>
@@ -308,6 +307,10 @@ export default function Dashboard() {
             </div>
             <span className="font-bold text-gray-900 text-sm">Imputación de Horas</span>
           </div>
+          <nav className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+            <span className="px-4 py-1.5 text-sm font-semibold text-white bg-blue-600 rounded-lg">Dashboard</span>
+            <Link href="/timesheet" className="px-4 py-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 rounded-lg transition-colors">Timesheet</Link>
+          </nav>
           {user && (
             <div className="flex items-center gap-3">
               {user.avatarUrl ? <img src={user.avatarUrl} className="w-8 h-8 rounded-full ring-2 ring-gray-100" alt={user.displayName} /> : <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold">{user.displayName.charAt(0)}</div>}
@@ -334,12 +337,9 @@ export default function Dashboard() {
                   <span className="text-gray-300 text-sm font-medium"> / {JORNADA_HORAS}h</span>
                 </div>
               </div>
-              {/* Barra compuesta: ya imputadas + nuevas */}
               <div className="h-3 bg-gray-100 rounded-full overflow-hidden flex">
-                <div className={`h-full transition-all duration-500 ${llegaObjetivo ? "bg-green-500" : "bg-green-400"}`}
-                  style={{ width: `${Math.min((alreadyLoggedToday / JORNADA_HORAS) * 100, 100)}%` }} />
-                <div className="h-full bg-blue-400 transition-all duration-500"
-                  style={{ width: `${Math.min((newHoras / JORNADA_HORAS) * 100, 100 - (alreadyLoggedToday / JORNADA_HORAS) * 100)}%` }} />
+                <div className={`h-full transition-all duration-500 ${llegaObjetivo ? "bg-green-500" : "bg-green-400"}`} style={{ width: `${Math.min((alreadyLoggedToday / JORNADA_HORAS) * 100, 100)}%` }} />
+                <div className="h-full bg-blue-400 transition-all duration-500" style={{ width: `${Math.min((newHoras / JORNADA_HORAS) * 100, 100 - (alreadyLoggedToday / JORNADA_HORAS) * 100)}%` }} />
               </div>
               <div className="flex justify-between mt-1.5 flex-wrap gap-1">
                 <div className="flex items-center gap-3 text-xs text-gray-400">

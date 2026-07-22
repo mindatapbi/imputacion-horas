@@ -17,25 +17,28 @@ interface Entry {
   comment: string;
 }
 
-interface DayGroup { date: string; entries: Entry[]; totalSeconds: number; }
+interface RowIssue {
+  issueKey: string;
+  issueSummary: string;
+  issueType: string;
+  project: string;
+  totalSeconds: number;
+  byDate: Record<string, Entry[]>;
+}
 
 const OBJETIVO_HORAS = 7.2;
 const JORNADA_HORAS = 8;
 
-const ISSUE_TYPE_STYLES: Record<string, { bg: string; text: string; emoji: string }> = {
-  "Epic":     { bg: "bg-purple-100", text: "text-purple-700", emoji: "⚡" },
-  "Story":    { bg: "bg-green-100",  text: "text-green-700",  emoji: "📗" },
-  "Task":     { bg: "bg-blue-100",   text: "text-blue-700",   emoji: "✅" },
-  "Sub-task": { bg: "bg-gray-100",   text: "text-gray-600",   emoji: "↳" },
-  "Bug":      { bg: "bg-red-100",    text: "text-red-700",    emoji: "🐛" },
+const ISSUE_TYPE_STYLES: Record<string, { emoji: string; color: string }> = {
+  "Epic":     { emoji: "⚡", color: "text-purple-500" },
+  "Story":    { emoji: "📗", color: "text-green-500" },
+  "Task":     { emoji: "✅", color: "text-blue-500" },
+  "Sub-task": { emoji: "↳",  color: "text-gray-400" },
+  "Bug":      { emoji: "🐛", color: "text-red-500" },
 };
 
-function IssueTypeBadge({ type }: { type: string }) {
-  const s = ISSUE_TYPE_STYLES[type] || { bg: "bg-gray-100", text: "text-gray-600", emoji: "📄" };
-  return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${s.bg} ${s.text}`}>{s.emoji} {type}</span>;
-}
-
 function fmtTime(seconds: number) {
+  if (seconds === 0) return "";
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   if (m === 0) return `${h}h`;
@@ -44,7 +47,18 @@ function fmtTime(seconds: number) {
 }
 
 function fmtDate(dateStr: string) {
-  return new Date(dateStr + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
+  return new Date(dateStr + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" });
+}
+
+function getDaysInRange(from: string, to: string): string[] {
+  const days: string[] = [];
+  const cur = new Date(from + "T12:00:00");
+  const end = new Date(to + "T12:00:00");
+  while (cur <= end) {
+    days.push(cur.toISOString().split("T")[0]);
+    cur.setDate(cur.getDate() + 1);
+  }
+  return days;
 }
 
 function EditModal({ entry, onSave, onClose }: { entry: Entry; onSave: (e: Entry) => void; onClose: () => void }) {
@@ -61,8 +75,8 @@ function EditModal({ entry, onSave, onClose }: { entry: Entry; onSave: (e: Entry
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ issueKey: entry.issueKey, worklogId: entry.worklogId, hours, minutes, comment, date: entry.date }),
     });
-    if (res.ok) { onSave({ ...entry, hours, minutes, timeSpentSeconds: hours * 3600 + minutes * 60, comment }); }
-    else { setError("No se pudo guardar. Intentá de nuevo."); }
+    if (res.ok) onSave({ ...entry, hours, minutes, timeSpentSeconds: hours * 3600 + minutes * 60, comment });
+    else setError("No se pudo guardar.");
     setSaving(false);
   };
 
@@ -72,7 +86,7 @@ function EditModal({ entry, onSave, onClose }: { entry: Entry; onSave: (e: Entry
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="font-bold text-gray-900">Editar registro</h3>
-            <p className="text-xs text-blue-500 font-mono font-semibold mt-0.5">{entry.issueKey}</p>
+            <p className="text-xs text-blue-500 font-mono font-semibold mt-0.5">{entry.issueKey} · {fmtDate(entry.date)}</p>
             <p className="text-sm text-gray-600 mt-0.5 truncate max-w-xs">{entry.issueSummary}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1">
@@ -91,7 +105,6 @@ function EditModal({ entry, onSave, onClose }: { entry: Entry; onSave: (e: Entry
                 <input type="number" min={0} max={59} step={15} value={minutes} onChange={e => setMinutes(parseInt(e.target.value) || 0)} className="w-12 text-center text-lg font-bold text-gray-900 focus:outline-none bg-transparent" />
                 <span className="text-sm text-gray-400 font-medium">min</span>
               </div>
-              <span className="text-sm text-gray-400">= {fmtTime(hours * 3600 + minutes * 60)}</span>
             </div>
           </div>
           <div>
@@ -103,7 +116,7 @@ function EditModal({ entry, onSave, onClose }: { entry: Entry; onSave: (e: Entry
         <div className="flex gap-3 mt-5">
           <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-600 font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors text-sm">Cancelar</button>
           <button onClick={handleSave} disabled={saving} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm disabled:opacity-50">
-            {saving ? "Guardando..." : "Guardar cambios"}
+            {saving ? "Guardando..." : "Guardar"}
           </button>
         </div>
       </div>
@@ -113,11 +126,16 @@ function EditModal({ entry, onSave, onClose }: { entry: Entry; onSave: (e: Entry
 
 export default function TimesheetPage() {
   const now = new Date();
-  const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-  const today = now.toISOString().split("T")[0];
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
 
-  const [from, setFrom] = useState(firstOfMonth);
-  const [to, setTo] = useState(today);
+  const fmt = (d: Date) => d.toISOString().split("T")[0];
+  const today = fmt(now);
+
+  const [from, setFrom] = useState(fmt(monday));
+  const [to, setTo] = useState(fmt(sunday));
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<{ displayName: string; email: string; avatarUrl: string } | null>(null);
@@ -148,8 +166,7 @@ export default function TimesheetPage() {
     if (!confirm(`¿Eliminar ${fmtTime(entry.timeSpentSeconds)} de ${entry.issueKey}?`)) return;
     setDeletingId(entry.worklogId);
     const res = await fetch("/api/jira/timesheet", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
+      method: "DELETE", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ issueKey: entry.issueKey, worklogId: entry.worklogId }),
     });
     if (res.ok) setEntries(prev => prev.filter(e => e.worklogId !== entry.worklogId));
@@ -157,23 +174,45 @@ export default function TimesheetPage() {
     setDeletingId(null);
   };
 
-  // Agrupar por día
-  const dayGroups: DayGroup[] = [];
-  const dayMap: Record<string, DayGroup> = {};
-  for (const entry of entries) {
-    if (!dayMap[entry.date]) { dayMap[entry.date] = { date: entry.date, entries: [], totalSeconds: 0 }; dayGroups.push(dayMap[entry.date]); }
-    dayMap[entry.date].entries.push(entry);
-    dayMap[entry.date].totalSeconds += entry.timeSpentSeconds;
-  }
+  // Navegación semana/mes
+  const shiftWeek = (dir: number) => {
+    const f = new Date(from + "T12:00:00"); f.setDate(f.getDate() + dir * 7);
+    const t = new Date(to + "T12:00:00"); t.setDate(t.getDate() + dir * 7);
+    setFrom(fmt(f)); setTo(fmt(t));
+  };
 
-  const totalSeconds = entries.reduce((acc, e) => acc + e.timeSpentSeconds, 0);
-  const workingDays = dayGroups.filter(d => { const dow = new Date(d.date + "T12:00:00").getDay(); return dow !== 0 && dow !== 6; });
-  const completeDays = workingDays.filter(d => d.totalSeconds >= OBJETIVO_HORAS * 3600).length;
+  const goThisWeek = () => { setFrom(fmt(monday)); setTo(fmt(sunday)); };
+  const goThisMonth = () => {
+    const f = new Date(now.getFullYear(), now.getMonth(), 1);
+    const t = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    setFrom(fmt(f)); setTo(fmt(t));
+  };
+
+  // Construir estructura: filas = issues, columnas = días
+  const days = getDaysInRange(from, to);
+  const rowMap: Record<string, RowIssue> = {};
+  for (const entry of entries) {
+    if (!rowMap[entry.issueKey]) {
+      rowMap[entry.issueKey] = { issueKey: entry.issueKey, issueSummary: entry.issueSummary, issueType: entry.issueType, project: entry.project, totalSeconds: 0, byDate: {} };
+    }
+    if (!rowMap[entry.issueKey].byDate[entry.date]) rowMap[entry.issueKey].byDate[entry.date] = [];
+    rowMap[entry.issueKey].byDate[entry.date].push(entry);
+    rowMap[entry.issueKey].totalSeconds += entry.timeSpentSeconds;
+  }
+  const rows = Object.values(rowMap).sort((a, b) => a.issueKey.localeCompare(b.issueKey));
+
+  // Totales por día
+  const dayTotals: Record<string, number> = {};
+  for (const entry of entries) { dayTotals[entry.date] = (dayTotals[entry.date] || 0) + entry.timeSpentSeconds; }
+  const grandTotal = entries.reduce((acc, e) => acc + e.timeSpentSeconds, 0);
+
+  const isWeekend = (d: string) => { const dow = new Date(d + "T12:00:00").getDay(); return dow === 0 || dow === 6; };
+  const isToday = (d: string) => d === today;
 
   return (
     <main className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-100 px-6 py-3 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
+        <div className="max-w-full mx-auto px-2 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
               <svg style={{width:18,height:18}} className="text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -194,35 +233,29 @@ export default function TimesheetPage() {
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">
-        {/* Selector de período + stats */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide block mb-2">Período</label>
+      <div className="px-6 py-6 space-y-5">
+        {/* Controles */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+          <div className="flex flex-wrap items-center gap-3 justify-between">
+            <div className="flex items-center gap-2">
+              <button onClick={() => shiftWeek(-1)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50">
+                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+              </button>
               <div className="flex items-center gap-2">
                 <input type="date" value={from} onChange={e => setFrom(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 <span className="text-gray-400 text-sm">→</span>
-                <input type="date" value={to} max={today} onChange={e => setTo(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                <button onClick={fetchTimesheet} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
-                  {loading ? "..." : "Buscar"}
-                </button>
+                <input type="date" value={to} onChange={e => setTo(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
+              <button onClick={() => shiftWeek(1)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50">
+                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </button>
+              <button onClick={goThisWeek} className="text-xs font-medium text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 transition-colors">Esta semana</button>
+              <button onClick={goThisMonth} className="text-xs font-medium text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 transition-colors">Este mes</button>
             </div>
             {!loading && entries.length > 0 && (
-              <div className="flex items-center gap-5">
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-gray-900">{fmtTime(totalSeconds)}</p>
-                  <p className="text-xs text-gray-400">Total registrado</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-green-600">{completeDays}</p>
-                  <p className="text-xs text-gray-400">Días completos</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-gray-900">{workingDays.length}</p>
-                  <p className="text-xs text-gray-400">Días con registro</p>
-                </div>
+              <div className="flex items-center gap-4 text-sm">
+                <span className="text-gray-400">Total: <span className="font-bold text-gray-900">{fmtTime(grandTotal)}</span></span>
+                <span className="text-gray-400">Registrado: <span className="font-bold text-gray-900">{entries.length} entradas</span></span>
               </div>
             )}
           </div>
@@ -230,73 +263,137 @@ export default function TimesheetPage() {
 
         {error && <div className="p-3 bg-red-50 border border-red-100 rounded-xl"><p className="text-sm text-red-600">{error}</p></div>}
 
-        {/* Lista de días */}
+        {/* Tabla tipo Tempo */}
         {loading ? (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 flex items-center justify-center gap-3 text-gray-400">
             <div className="w-5 h-5 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
             Cargando registros...
           </div>
-        ) : dayGroups.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 text-center">
-            <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
-              <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-            </div>
-            <p className="text-sm font-medium text-gray-400">No hay registros en este período</p>
-          </div>
         ) : (
-          <div className="space-y-3">
-            {dayGroups.map(day => {
-              const dow = new Date(day.date + "T12:00:00").getDay();
-              const isWeekend = dow === 0 || dow === 6;
-              const isComplete = day.totalSeconds >= OBJETIVO_HORAS * 3600;
-              const pct = Math.min((day.totalSeconds / (JORNADA_HORAS * 3600)) * 100, 100);
-              return (
-                <div key={day.date} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                  {/* Header del día */}
-                  <div className={`px-5 py-3 flex items-center justify-between ${isComplete ? "bg-green-50" : isWeekend ? "bg-gray-50" : "bg-orange-50"}`}>
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${isComplete ? "bg-green-500" : isWeekend ? "bg-gray-300" : "bg-orange-400"}`} />
-                      <span className="text-sm font-semibold text-gray-900 capitalize">{fmtDate(day.date)}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full ${isComplete ? "bg-green-500" : "bg-orange-400"}`} style={{ width: `${pct}%` }} />
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    {/* Col ticket */}
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide bg-gray-50 sticky left-0 z-10 min-w-[280px] border-r border-gray-100">
+                      Incidencia
+                    </th>
+                    <th className="text-right px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide bg-gray-50 min-w-[80px]">
+                      Total
+                    </th>
+                    {/* Cols días */}
+                    {days.map(d => (
+                      <th key={d} className={`text-center px-2 py-3 min-w-[72px] ${isWeekend(d) ? "bg-gray-50/80" : isToday(d) ? "bg-blue-50" : "bg-gray-50"}`}>
+                        <div className={`text-xs font-semibold uppercase tracking-wide ${isToday(d) ? "text-blue-600" : isWeekend(d) ? "text-gray-300" : "text-gray-400"}`}>
+                          {new Date(d + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short" })}
                         </div>
-                        <span className={`text-sm font-bold ${isComplete ? "text-green-700" : "text-orange-600"}`}>{fmtTime(day.totalSeconds)}</span>
-                      </div>
-                      {isComplete && <span className="text-xs text-green-600 font-medium bg-green-100 px-2 py-0.5 rounded-full">✓ Completo</span>}
-                    </div>
-                  </div>
-
-                  {/* Entradas del día */}
-                  <div className="divide-y divide-gray-50">
-                    {day.entries.map(entry => (
-                      <div key={entry.worklogId} className={`px-5 py-3 flex items-center gap-4 hover:bg-gray-50 transition-colors ${deletingId === entry.worklogId ? "opacity-40" : ""}`}>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-mono font-semibold text-blue-500">{entry.issueKey}</span>
-                            <IssueTypeBadge type={entry.issueType} />
-                            <span className="text-xs text-gray-400">{entry.project}</span>
-                          </div>
-                          <p className="text-sm font-medium text-gray-900 mt-0.5 truncate">{entry.issueSummary}</p>
-                          {entry.comment && <p className="text-xs text-gray-400 mt-0.5 truncate">💬 {entry.comment}</p>}
+                        <div className={`text-sm font-bold mt-0.5 ${isToday(d) ? "text-blue-700" : isWeekend(d) ? "text-gray-300" : "text-gray-700"}`}>
+                          {new Date(d + "T12:00:00").getDate()}
                         </div>
-                        <div className="flex items-center gap-3 flex-shrink-0">
-                          <span className="text-sm font-bold text-gray-900 w-16 text-right">{fmtTime(entry.timeSpentSeconds)}</span>
-                          <button onClick={() => setEditingEntry(entry)} className="text-gray-300 hover:text-blue-500 transition-colors p-1.5 rounded-lg hover:bg-blue-50">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                          </button>
-                          <button onClick={() => handleDelete(entry)} disabled={deletingId === entry.worklogId} className="text-gray-300 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                          </button>
-                        </div>
-                      </div>
+                      </th>
                     ))}
-                  </div>
-                </div>
-              );
-            })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={days.length + 2} className="text-center py-12 text-gray-400 text-sm">
+                        No hay registros en este período
+                      </td>
+                    </tr>
+                  ) : rows.map((row, rowIdx) => {
+                    const typeStyle = ISSUE_TYPE_STYLES[row.issueType] || { emoji: "📄", color: "text-gray-400" };
+                    return (
+                      <tr key={row.issueKey} className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors ${rowIdx % 2 === 0 ? "" : "bg-gray-50/30"}`}>
+                        {/* Ticket */}
+                        <td className="px-4 py-3 sticky left-0 bg-white border-r border-gray-100 z-10">
+                          <div className="flex items-start gap-2">
+                            <span className={`text-sm mt-0.5 ${typeStyle.color}`}>{typeStyle.emoji}</span>
+                            <div className="min-w-0">
+                              <p className="font-medium text-gray-900 truncate max-w-[220px]">{row.issueSummary}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-xs font-mono font-semibold text-blue-500">{row.issueKey}</span>
+                                <span className="text-xs text-gray-400">·</span>
+                                <span className="text-xs text-gray-400 truncate">{row.project}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        {/* Total fila */}
+                        <td className="px-3 py-3 text-right">
+                          <span className="text-sm font-bold text-gray-900">{fmtTime(row.totalSeconds)}</span>
+                        </td>
+                        {/* Celdas por día */}
+                        {days.map(d => {
+                          const dayEntries = row.byDate[d] || [];
+                          const daySeconds = dayEntries.reduce((acc, e) => acc + e.timeSpentSeconds, 0);
+                          return (
+                            <td key={d} className={`px-2 py-3 text-center align-middle ${isWeekend(d) ? "bg-gray-50/60" : isToday(d) ? "bg-blue-50/40" : ""}`}>
+                              {dayEntries.length > 0 ? (
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className="text-sm font-semibold text-gray-800">{fmtTime(daySeconds)}</span>
+                                  <div className="flex items-center gap-0.5">
+                                    {dayEntries.map(e => (
+                                      <div key={e.worklogId} className="flex items-center gap-0.5">
+                                        <button onClick={() => setEditingEntry(e)} title="Editar" className="text-gray-300 hover:text-blue-500 transition-colors">
+                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                        </button>
+                                        <button onClick={() => handleDelete(e)} disabled={deletingId === e.worklogId} title="Eliminar" className="text-gray-300 hover:text-red-500 transition-colors">
+                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-gray-200 text-xs">—</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                {/* Fila de totales por día */}
+                <tfoot>
+                  <tr className="border-t-2 border-gray-200 bg-gray-50">
+                    <td className="px-4 py-3 sticky left-0 bg-gray-50 border-r border-gray-100 z-10">
+                      <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Total</span>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <span className="text-sm font-bold text-gray-900">{fmtTime(grandTotal)}</span>
+                    </td>
+                    {days.map(d => {
+                      const secs = dayTotals[d] || 0;
+                      const isComplete = secs >= OBJETIVO_HORAS * 3600;
+                      const isPartial = secs > 0 && !isComplete;
+                      return (
+                        <td key={d} className={`px-2 py-3 text-center ${isWeekend(d) ? "bg-gray-100/60" : isToday(d) ? "bg-blue-50/60" : ""}`}>
+                          {secs > 0 ? (
+                            <span className={`text-sm font-bold ${isComplete ? "text-green-600" : isPartial ? "text-orange-500" : "text-gray-400"}`}>
+                              {fmtTime(secs)}
+                            </span>
+                          ) : (
+                            <span className="text-gray-200 text-xs">—</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* Leyenda */}
+            {rows.length > 0 && (
+              <div className="px-4 py-3 border-t border-gray-100 flex items-center gap-4 text-xs text-gray-400">
+                <span className="flex items-center gap-1.5"><span className="font-bold text-green-600">8h</span> Día completo (≥7.2h)</span>
+                <span className="flex items-center gap-1.5"><span className="font-bold text-orange-500">5h</span> Día parcial</span>
+                <span className="text-gray-300">Hacé click en ✏️ para editar o ✕ para eliminar</span>
+              </div>
+            )}
           </div>
         )}
       </div>
