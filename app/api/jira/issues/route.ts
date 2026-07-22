@@ -2,17 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { SessionData, sessionOptions } from "@/lib/session";
-import { readFile } from "fs/promises";
-import path from "path";
-
-async function getToken(accountId: string): Promise<string | null> {
-  try {
-    const data = await readFile(path.join(process.cwd(), ".token-store", `${accountId}.json`), "utf-8");
-    return JSON.parse(data).token;
-  } catch {
-    return null;
-  }
-}
+import { getToken } from "@/lib/redis";
 
 export async function GET(request: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
@@ -49,12 +39,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ projects });
     }
 
-    // Buscar tickets del proyecto
     const jql = encodeURIComponent(`project = "${projectKey}" ORDER BY updated DESC`);
     const url = `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,status,project&maxResults=100`;
-    
-    console.log("Fetching URL:", url);
-    
+
     const response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -62,11 +49,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    console.log("Status:", response.status);
-    const text = await response.text();
-    console.log("Body:", text.substring(0, 800));
-
-    const data = JSON.parse(text);
+    const data = await response.json();
     const issues = data.issues?.map((issue: any) => ({
       key: issue.key,
       summary: issue.fields.summary,
@@ -76,7 +59,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ issues });
   } catch (error) {
-    console.error("Error:", error);
     return NextResponse.json({ error: "Error al obtener datos" }, { status: 500 });
   }
 }

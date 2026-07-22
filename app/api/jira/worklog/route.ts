@@ -2,17 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { SessionData, sessionOptions } from "@/lib/session";
-import { readFile } from "fs/promises";
-import path from "path";
-
-async function getToken(accountId: string): Promise<string | null> {
-  try {
-    const data = await readFile(path.join(process.cwd(), ".token-store", `${accountId}.json`), "utf-8");
-    return JSON.parse(data).token;
-  } catch {
-    return null;
-  }
-}
+import { getToken } from "@/lib/redis";
 
 export async function POST(request: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);

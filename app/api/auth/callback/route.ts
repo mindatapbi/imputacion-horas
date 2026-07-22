@@ -2,16 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { SessionData, sessionOptions } from "@/lib/session";
-import { writeFile, readFile, mkdir } from "fs/promises";
-import { existsSync } from "fs";
-import path from "path";
-
-const TOKEN_DIR = path.join(process.cwd(), ".token-store");
-
-async function saveToken(accountId: string, token: string) {
-  if (!existsSync(TOKEN_DIR)) await mkdir(TOKEN_DIR, { recursive: true });
-  await writeFile(path.join(TOKEN_DIR, `${accountId}.json`), JSON.stringify({ token }), "utf-8");
-}
+import { saveToken } from "@/lib/redis";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -52,7 +43,7 @@ export async function GET(request: NextRequest) {
     );
     const userData = await userResponse.json();
 
-    // Guardar token en disco (server-side), NO en la cookie
+    // Guardar token en Redis
     await saveToken(userData.accountId, tokenData.access_token);
 
     // En la cookie solo guardamos IDs pequeños
