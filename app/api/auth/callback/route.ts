@@ -7,10 +7,7 @@ import { saveToken } from "@/lib/redis";
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
-
-  if (!code) {
-    return NextResponse.redirect(new URL("/?error=no_code", request.url));
-  }
+  if (!code) return NextResponse.redirect(new URL("/?error=no_code", request.url));
 
   try {
     const tokenResponse = await fetch("https://auth.atlassian.com/oauth/token", {
@@ -26,9 +23,7 @@ export async function GET(request: NextRequest) {
     });
 
     const tokenData = await tokenResponse.json();
-    if (!tokenData.access_token) {
-      return NextResponse.redirect(new URL("/?error=token_failed", request.url));
-    }
+    if (!tokenData.access_token) return NextResponse.redirect(new URL("/?error=token_failed", request.url));
 
     const resourcesResponse = await fetch(
       "https://api.atlassian.com/oauth/token/accessible-resources",
@@ -43,10 +38,9 @@ export async function GET(request: NextRequest) {
     );
     const userData = await userResponse.json();
 
-    // Guardar token en Redis
-    await saveToken(userData.accountId, tokenData.access_token);
+    // Guardar access token Y refresh token
+    await saveToken(userData.accountId, tokenData.access_token, tokenData.refresh_token || "");
 
-    // En la cookie solo guardamos IDs pequeños
     const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
     session.cloudId = cloudId;
     session.user = {

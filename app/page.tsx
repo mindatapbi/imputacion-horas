@@ -1,7 +1,7 @@
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { SessionData, sessionOptions } from "@/lib/session";
-import { getToken } from "@/lib/redis";
+import { getToken, refreshAccessToken } from "@/lib/redis";
 import { redirect } from "next/navigation";
 
 export default async function Home({
@@ -12,15 +12,12 @@ export default async function Home({
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
   const params = await searchParams;
 
-  // Si hay sesión, verificar que el token exista en Redis
-  if (session.user?.accountId) {
-    const token = await getToken(session.user.accountId);
-    if (token) {
-      redirect("/dashboard");
-    } else {
-      // Token no existe en Redis, destruir sesión y mostrar login
-      session.destroy();
-    }
+  if (session.user?.accountId && session.cloudId) {
+    // Intentar obtener token válido, renovando si es necesario
+    const token = await getToken(session.user.accountId) || 
+                  await refreshAccessToken(session.user.accountId, session.cloudId);
+    if (token) redirect("/dashboard");
+    else session.destroy(); // Token expirado y no se pudo renovar — forzar login
   }
 
   const authUrl = `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${process.env.ATLASSIAN_CLIENT_ID}&scope=read%3Ajira-user%20read%3Ajira-work%20write%3Ajira-work&redirect_uri=${encodeURIComponent(process.env.ATLASSIAN_CALLBACK_URL!)}&response_type=code&prompt=consent`;
@@ -44,16 +41,10 @@ export default async function Home({
           </div>
         )}
 
-        <a
-          href={authUrl}
-          className="block w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors"
-        >
+        <a href={authUrl} className="block w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors">
           Iniciar sesión con Jira
         </a>
-
-        <p className="text-xs text-gray-400 mt-4">
-          Usamos tu cuenta de Atlassian. No guardamos tu contraseña.
-        </p>
+        <p className="text-xs text-gray-400 mt-4">Usamos tu cuenta de Atlassian. No guardamos tu contraseña.</p>
       </div>
     </main>
   );

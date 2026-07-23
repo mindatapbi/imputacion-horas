@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { SessionData, sessionOptions } from "@/lib/session";
-import { getToken } from "@/lib/redis";
+import { getToken, refreshAccessToken } from "@/lib/redis";
+
+async function getValidToken(accountId: string, cloudId: string): Promise<string | null> {
+  const token = await getToken(accountId);
+  if (token) return token;
+  return await refreshAccessToken(accountId, cloudId);
+}
 
 export async function GET(request: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
   if (!session.user?.accountId || !session.cloudId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  const accessToken = await getToken(session.user.accountId);
-  if (!accessToken) return NextResponse.json({ error: "Token no encontrado" }, { status: 401 });
+
+  const accessToken = await getValidToken(session.user.accountId, session.cloudId);
+  if (!accessToken) return NextResponse.json({ error: "Sesión expirada" }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
   const from = searchParams.get("from");
@@ -23,8 +30,8 @@ export async function GET(request: NextRequest) {
     );
     const issuesData = await issuesRes.json();
     const issues = issuesData.issues || [];
-
     const entries: any[] = [];
+
     await Promise.all(issues.map(async (issue: any) => {
       const wlRes = await fetch(
         `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/issue/${issue.key}/worklog`,
@@ -37,17 +44,12 @@ export async function GET(request: NextRequest) {
         if (date < from || date > to) continue;
         const comment = wl.comment?.content?.[0]?.content?.[0]?.text || "";
         entries.push({
-          worklogId: wl.id,
-          issueKey: issue.key,
-          issueSummary: issue.fields.summary,
-          issueType: issue.fields.issuetype?.name || "Task",
-          project: issue.fields.project?.name,
-          projectKey: issue.fields.project?.key,
-          date,
+          worklogId: wl.id, issueKey: issue.key, issueSummary: issue.fields.summary,
+          issueType: issue.fields.issuetype?.name || "Task", project: issue.fields.project?.name,
+          projectKey: issue.fields.project?.key, date,
           hours: Math.floor(wl.timeSpentSeconds / 3600),
           minutes: Math.floor((wl.timeSpentSeconds % 3600) / 60),
-          timeSpentSeconds: wl.timeSpentSeconds,
-          comment,
+          timeSpentSeconds: wl.timeSpentSeconds, comment,
         });
       }
     }));
@@ -55,7 +57,6 @@ export async function GET(request: NextRequest) {
     entries.sort((a, b) => a.date.localeCompare(b.date) || a.issueKey.localeCompare(b.issueKey));
     return NextResponse.json({ entries });
   } catch (error) {
-    console.error("Timesheet error:", error);
     return NextResponse.json({ error: "Error al obtener timesheet" }, { status: 500 });
   }
 }
@@ -63,8 +64,8 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
   if (!session.user?.accountId || !session.cloudId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  const accessToken = await getToken(session.user.accountId);
-  if (!accessToken) return NextResponse.json({ error: "Token no encontrado" }, { status: 401 });
+  const accessToken = await getValidToken(session.user.accountId, session.cloudId);
+  if (!accessToken) return NextResponse.json({ error: "Sesión expirada" }, { status: 401 });
 
   const { issueKey, worklogId, hours, minutes, comment, date } = await request.json();
   const timeSpentSeconds = hours * 3600 + minutes * 60;
@@ -77,8 +78,7 @@ export async function PUT(request: NextRequest) {
         method: "PUT",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
-          timeSpentSeconds,
-          started: `${date}T09:00:00.000+0000`,
+          timeSpentSeconds, started: `${date}T09:00:00.000+0000`,
           comment: { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: comment || "Imputación de horas" }] }] },
         }),
       }
@@ -94,8 +94,8 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
   if (!session.user?.accountId || !session.cloudId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  const accessToken = await getToken(session.user.accountId);
-  if (!accessToken) return NextResponse.json({ error: "Token no encontrado" }, { status: 401 });
+  const accessToken = await getValidToken(session.user.accountId, session.cloudId);
+  if (!accessToken) return NextResponse.json({ error: "Sesión expirada" }, { status: 401 });
 
   const { issueKey, worklogId } = await request.json();
   try {
