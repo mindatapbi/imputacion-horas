@@ -41,6 +41,64 @@ function IssueTypeBadge({ type }: { type: string }) {
   return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${s.bg} ${s.text}`}>{s.emoji} {type}</span>;
 }
 
+// Banner de sesión expirada
+function SessionExpiredBanner() {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl p-8 max-w-sm w-full text-center">
+        <div className="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg className="w-7 h-7 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <h3 className="text-lg font-bold text-gray-900 mb-2">Sesión expirada</h3>
+        <p className="text-sm text-gray-500 mb-6">Tu sesión venció. Necesitás volver a iniciar sesión con Jira para continuar.</p>
+        <a href="/api/auth/logout" className="block w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition-colors">
+          Volver a ingresar
+        </a>
+      </div>
+    </div>
+  );
+}
+
+// Tooltip de onboarding — se muestra solo la primera vez
+function OnboardingTooltip({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
+        <h3 className="text-lg font-bold text-gray-900 mb-1">¡Bienvenido a Imputación de Horas! 👋</h3>
+        <p className="text-sm text-gray-500 mb-5">Así funciona en 3 pasos simples:</p>
+        <div className="space-y-4 mb-6">
+          <div className="flex items-start gap-3">
+            <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">1</div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Elegí el proyecto</p>
+              <p className="text-xs text-gray-500 mt-0.5">En el panel izquierdo, buscá y seleccioná el proyecto de Jira donde trabajaste.</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">2</div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Agregá los tickets</p>
+              <p className="text-xs text-gray-500 mt-0.5">Expandí la épica correspondiente y hacé click en "+ Agregar" en cada ticket donde trabajaste.</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">3</div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Cargá las horas e imputá</p>
+              <p className="text-xs text-gray-500 mt-0.5">En el panel derecho, poné cuántas horas y minutos dedicaste a cada ticket y hacé click en "Imputar en Jira".</p>
+            </div>
+          </div>
+        </div>
+        <button onClick={onDismiss} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition-colors">
+          ¡Entendido, empezar!
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ProjectSelector({ projects, value, onChange }: { projects: Project[]; value: string; onChange: (k: string) => void }) {
   const [search, setSearch] = useState(""); const [open, setOpen] = useState(false); const ref = useRef<HTMLDivElement>(null);
   const selected = projects.find(p => p.key === value);
@@ -141,6 +199,7 @@ function CalendarView({ onTodayHours }: { onTodayHours: (h: number) => void }) {
   const fetchCalendar = async () => {
     setLoading(true);
     const res = await fetch(`/api/jira/calendar?year=${year}&month=${month}`);
+    if (res.status === 401) return;
     if (res.ok) {
       const data = await res.json();
       setDailyHours(data.dailyHours || {});
@@ -153,7 +212,6 @@ function CalendarView({ onTodayHours }: { onTodayHours: (h: number) => void }) {
 
   const prevMonth = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
   const nextMonth = () => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
-
   const firstDay = new Date(year, month - 1, 1).getDay();
   const daysInMonth = new Date(year, month, 0).getDate();
   const cells: (number | null)[] = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
@@ -181,13 +239,9 @@ function CalendarView({ onTodayHours }: { onTodayHours: (h: number) => void }) {
           <p className="text-xs text-gray-400 mt-0.5">{loading ? "Cargando..." : `${workedDays} días imputados · ${totalHours.toFixed(1)}h totales`}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-            <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-          </button>
+          <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50"><svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg></button>
           <span className="text-sm font-semibold text-gray-900 w-36 text-center">{MONTHS[month - 1]} {year}</span>
-          <button onClick={nextMonth} disabled={year === now.getFullYear() && month === now.getMonth() + 1} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-30">
-            <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-          </button>
+          <button onClick={nextMonth} disabled={year === now.getFullYear() && month === now.getMonth() + 1} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-30"><svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></button>
         </div>
       </div>
       <div className="flex items-center gap-4 mb-4 text-xs text-gray-500">
@@ -206,12 +260,7 @@ function CalendarView({ onTodayHours }: { onTodayHours: (h: number) => void }) {
           return (
             <div key={dateStr} className={`relative rounded-xl p-2 ${bg} ${isToday ? "ring-2 ring-blue-400 ring-offset-1" : ""} min-h-[56px] flex flex-col`}>
               <span className={`text-xs font-semibold ${isToday ? "text-blue-600" : text}`}>{day}</span>
-              {bar && (
-                <div className="mt-auto">
-                  <div className={`h-1 rounded-full ${bar} mt-1`} style={{ width: `${Math.min((dailyHours[dateStr] || 0) / JORNADA_HORAS * 100, 100)}%` }} />
-                  <span className="text-xs font-medium text-gray-500 mt-0.5 block">{label}</span>
-                </div>
-              )}
+              {bar && (<div className="mt-auto"><div className={`h-1 rounded-full ${bar} mt-1`} style={{ width: `${Math.min((dailyHours[dateStr] || 0) / JORNADA_HORAS * 100, 100)}%` }} /><span className="text-xs font-medium text-gray-500 mt-0.5 block">{label}</span></div>)}
             </div>
           );
         })}
@@ -233,6 +282,18 @@ function groupIssues(issues: Issue[]): Group[] {
   });
 }
 
+// Validar entradas antes de imputar
+function validateEntries(entries: Entry[]): string | null {
+  for (const e of entries) {
+    if (e.hours === 0 && e.minutes === 0) return `${e.issueKey}: el tiempo no puede ser 0. Poné al menos 1 minuto.`;
+    if (e.hours > 24) return `${e.issueKey}: no podés imputar más de 24h en un día.`;
+    if (e.minutes > 59) return `${e.issueKey}: los minutos deben ser entre 0 y 59.`;
+  }
+  const totalNuevas = entries.reduce((acc, e) => acc + e.hours + e.minutes / 60, 0);
+  if (totalNuevas > 24) return "El total de horas nuevas supera las 24h. Revisá los valores.";
+  return null;
+}
+
 export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState("");
@@ -244,23 +305,57 @@ export default function Dashboard() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [user, setUser] = useState<{ accountId: string; displayName: string; email: string; avatarUrl: string } | null>(null);
   const [issueSearch, setIssueSearch] = useState("");
   const [alreadyLoggedToday, setAlreadyLoggedToday] = useState(0);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
-  useEffect(() => { fetchUser(); fetchProjects(); }, []);
+  useEffect(() => {
+    fetchUser();
+    fetchProjects();
+    // Mostrar onboarding si es la primera vez
+    const seen = localStorage.getItem("onboarding-seen");
+    if (!seen) setShowOnboarding(true);
+  }, []);
+
   useEffect(() => { if (selectedProject) fetchIssues(selectedProject); else setIssues([]); setIssueSearch(""); }, [selectedProject]);
 
-  const fetchUser = async () => { const res = await fetch("/api/auth/me"); if (res.ok) { const data = await res.json(); setUser(data.user); } };
+  const handleSessionExpired = () => setSessionExpired(true);
+
+  const fetchUser = async () => {
+    const res = await fetch("/api/auth/me");
+    if (res.status === 401) { handleSessionExpired(); return; }
+    if (res.ok) { const data = await res.json(); setUser(data.user); }
+  };
+
   const fetchProjects = async () => {
     setLoadingProjects(true);
     const res = await fetch("/api/jira/issues");
-    if (res.status === 401) { window.location.href = "/"; return; }
+    if (res.status === 401) { handleSessionExpired(); return; }
+    if (!res.ok) { setError("No se pudieron cargar los proyectos. Intentá recargar la página."); setLoadingProjects(false); return; }
     const data = await res.json(); setProjects(data.projects || []); setLoadingProjects(false);
   };
-  const fetchIssues = async (pk: string) => { setLoadingIssues(true); const res = await fetch(`/api/jira/issues?project=${pk}`); const data = await res.json(); setIssues(data.issues || []); setLoadingIssues(false); };
-  const addEntry = (issue: Issue) => { if (entries.find(e => e.issueKey === issue.key)) return; setEntries([...entries, { issueKey: issue.key, summary: issue.summary, hours: 0, minutes: 0, comment: "" }]); };
-  const updateEntry = (issueKey: string, field: keyof Entry, value: string | number) => setEntries(entries.map(e => e.issueKey === issueKey ? { ...e, [field]: value } : e));
+
+  const fetchIssues = async (pk: string) => {
+    setLoadingIssues(true);
+    const res = await fetch(`/api/jira/issues?project=${pk}`);
+    if (res.status === 401) { handleSessionExpired(); return; }
+    if (!res.ok) { setError("No se pudieron cargar los tickets. Intentá de nuevo."); setLoadingIssues(false); return; }
+    const data = await res.json(); setIssues(data.issues || []); setLoadingIssues(false);
+  };
+
+  const addEntry = (issue: Issue) => {
+    if (entries.find(e => e.issueKey === issue.key)) return;
+    setEntries([...entries, { issueKey: issue.key, summary: issue.summary, hours: 0, minutes: 0, comment: "" }]);
+    setError("");
+  };
+
+  const updateEntry = (issueKey: string, field: keyof Entry, value: string | number) => {
+    setEntries(entries.map(e => e.issueKey === issueKey ? { ...e, [field]: value } : e));
+    setError("");
+  };
+
   const removeEntry = (issueKey: string) => setEntries(entries.filter(e => e.issueKey !== issueKey));
 
   const newHoras = entries.reduce((acc, e) => acc + e.hours + e.minutes / 60, 0);
@@ -272,12 +367,37 @@ export default function Dashboard() {
   const groups = groupIssues(filteredIssues);
 
   const handleSubmit = async () => {
-    if (entries.length === 0) return; setSubmitting(true); setError("");
-    const res = await fetch("/api/jira/worklog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries: entries.map(e => ({ ...e, date })) }) });
+    if (entries.length === 0) return;
+
+    // Validar antes de enviar
+    const validationError = validateEntries(entries);
+    if (validationError) { setError(validationError); return; }
+
+    setSubmitting(true); setError("");
+    const res = await fetch("/api/jira/worklog", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entries: entries.map(e => ({ ...e, date })) }),
+    });
+
+    if (res.status === 401) { handleSessionExpired(); setSubmitting(false); return; }
+    if (!res.ok) { setError("Error al conectar con Jira. Intentá de nuevo en unos segundos."); setSubmitting(false); return; }
+
     const data = await res.json();
-    if (data.errors?.length > 0) setError(`No se pudieron imputar: ${data.errors.map((e: any) => e.issueKey).join(", ")}`);
-    else { setSubmitted(true); setAlreadyLoggedToday(prev => prev + newHoras); }
+    if (data.errors?.length > 0) {
+      setError(`No se pudieron imputar algunos tickets: ${data.errors.map((e: any) => e.issueKey).join(", ")}. El resto se imputó correctamente.`);
+      // Remover solo los que sí se imputaron
+      const failedKeys = data.errors.map((e: any) => e.issueKey);
+      setEntries(prev => prev.filter(e => failedKeys.includes(e.issueKey)));
+    } else {
+      setSubmitted(true);
+      setAlreadyLoggedToday(prev => prev + newHoras);
+    }
     setSubmitting(false);
+  };
+
+  const dismissOnboarding = () => {
+    localStorage.setItem("onboarding-seen", "true");
+    setShowOnboarding(false);
   };
 
   if (submitted) {
@@ -299,6 +419,9 @@ export default function Dashboard() {
 
   return (
     <main className="min-h-screen bg-gray-50">
+      {sessionExpired && <SessionExpiredBanner />}
+      {showOnboarding && <OnboardingTooltip onDismiss={dismissOnboarding} />}
+
       <header className="bg-white border-b border-gray-100 px-6 py-3 sticky top-0 z-10 shadow-sm">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -322,6 +445,17 @@ export default function Dashboard() {
       </header>
 
       <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">
+        {/* Error global */}
+        {error && (
+          <div className="p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3">
+            <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+            <div className="flex-1">
+              <p className="text-sm text-red-700 font-medium">{error}</p>
+            </div>
+            <button onClick={() => setError("")} className="text-red-400 hover:text-red-600"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+          </div>
+        )}
+
         {/* Progreso */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
@@ -381,26 +515,39 @@ export default function Dashboard() {
             {entries.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center py-10 text-center">
                 <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3"><svg className="w-7 h-7 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>
-                <p className="text-sm font-medium text-gray-400">Sin tickets seleccionados</p><p className="text-xs text-gray-300 mt-1">Agregá tickets desde el panel izquierdo</p>
+                <p className="text-sm font-medium text-gray-400">Sin tickets seleccionados</p>
+                <p className="text-xs text-gray-300 mt-1">Agregá tickets desde el panel izquierdo</p>
               </div>
             ) : (
               <div className="flex-1 space-y-3 overflow-y-auto pr-1">
-                {entries.map(entry => (
-                  <div key={entry.issueKey} className="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0"><p className="text-sm font-semibold text-gray-900 truncate">{entry.summary}</p><span className="text-xs font-mono font-semibold text-blue-500">{entry.issueKey}</span></div>
-                      <button onClick={() => removeEntry(entry.issueKey)} className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition-all"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+                {entries.map(entry => {
+                  const hasError = entry.hours === 0 && entry.minutes === 0;
+                  return (
+                    <div key={entry.issueKey} className={`p-4 rounded-xl border space-y-3 ${hasError ? "bg-red-50 border-red-100" : "bg-gray-50 border-gray-100"}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{entry.summary}</p>
+                          <span className="text-xs font-mono font-semibold text-blue-500">{entry.issueKey}</span>
+                          {hasError && <p className="text-xs text-red-500 mt-0.5">⚠ Poné al menos 1 minuto</p>}
+                        </div>
+                        <button onClick={() => removeEntry(entry.issueKey)} className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition-all"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className={`flex items-center gap-1 bg-white border rounded-lg px-2 py-1.5 ${hasError ? "border-red-200" : "border-gray-200"}`}>
+                          <input type="number" min={0} max={24} value={entry.hours} onChange={e => updateEntry(entry.issueKey, "hours", parseInt(e.target.value) || 0)} className="w-10 text-center text-sm font-semibold text-gray-900 focus:outline-none" />
+                          <span className="text-xs text-gray-400">h</span>
+                        </div>
+                        <div className={`flex items-center gap-1 bg-white border rounded-lg px-2 py-1.5 ${hasError ? "border-red-200" : "border-gray-200"}`}>
+                          <input type="number" min={0} max={59} step={15} value={entry.minutes} onChange={e => updateEntry(entry.issueKey, "minutes", parseInt(e.target.value) || 0)} className="w-10 text-center text-sm font-semibold text-gray-900 focus:outline-none" />
+                          <span className="text-xs text-gray-400">min</span>
+                        </div>
+                        <input type="text" placeholder="Comentario (opcional)" value={entry.comment} onChange={e => updateEntry(entry.issueKey, "comment", e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-2 py-1.5"><input type="number" min={0} max={24} value={entry.hours} onChange={e => updateEntry(entry.issueKey, "hours", parseInt(e.target.value) || 0)} className="w-10 text-center text-sm font-semibold text-gray-900 focus:outline-none" /><span className="text-xs text-gray-400">h</span></div>
-                      <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-2 py-1.5"><input type="number" min={0} max={59} step={15} value={entry.minutes} onChange={e => updateEntry(entry.issueKey, "minutes", parseInt(e.target.value) || 0)} className="w-10 text-center text-sm font-semibold text-gray-900 focus:outline-none" /><span className="text-xs text-gray-400">min</span></div>
-                      <input type="text" placeholder="Comentario (opcional)" value={entry.comment} onChange={e => updateEntry(entry.issueKey, "comment", e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
-            {error && <div className="mt-3 p-3 bg-red-50 border border-red-100 rounded-xl"><p className="text-sm text-red-600">{error}</p></div>}
             {entries.length > 0 && (
               <button onClick={handleSubmit} disabled={submitting || newHoras === 0} className={`mt-4 w-full font-semibold py-3 rounded-xl transition-all text-sm ${newHoras === 0 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : submitting ? "bg-blue-400 text-white cursor-wait" : "bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-200"}`}>
                 {submitting ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Imputando en Jira...</span> : `Imputar ${newHoras.toFixed(1)}h en Jira →`}
@@ -409,7 +556,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Calendario */}
         <CalendarView onTodayHours={setAlreadyLoggedToday} />
       </div>
     </main>
