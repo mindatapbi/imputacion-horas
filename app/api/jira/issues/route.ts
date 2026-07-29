@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   try {
     if (!projectKey) {
       const response = await fetch(
-        `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/project/search?maxResults=100&orderBy=name`,
+        `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/project/search?maxResults=100&orderBy=name&action=browse`,
         { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
       );
       const data = await response.json();
