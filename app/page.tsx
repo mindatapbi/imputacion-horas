@@ -13,16 +13,14 @@ export default async function Home({
   const params = await searchParams;
 
   if (session.user?.accountId && session.cloudId) {
-    // Intentar obtener token válido, renovando si es necesario
     const token = await getToken(session.user.accountId) || 
                   await refreshAccessToken(session.user.accountId, session.cloudId);
     if (token) redirect("/dashboard");
-    else session.destroy(); // Token expirado y no se pudo renovar — forzar login
+    else session.destroy();
   }
 
-  // const authUrl = `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${process.env.ATLASSIAN_CLIENT_ID}&scope=read%3Ajira-user%20read%3Ajira-work%20write%3Ajira-work&redirect_uri=${encodeURIComponent(process.env.ATLASSIAN_CALLBACK_URL!)}&response_type=code&prompt=consent`;
-  const authUrl = `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${process.env.ATLASSIAN_CLIENT_ID}&scope=read%3Ajira-user%20read%3Ajira-work%20write%3Ajira-work&redirect_uri=${encodeURIComponent(process.env.ATLASSIAN_CALLBACK_URL!)}&response_type=code&prompt=consent&resource=ari:cloud:jira::site/${process.env.ATLASSIAN_CLOUD_ID}`;
-  
+  const authUrl = `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${process.env.ATLASSIAN_CLIENT_ID}&scope=read%3Ajira-user%20read%3Ajira-work%20write%3Ajira-work&redirect_uri=${encodeURIComponent(process.env.ATLASSIAN_CALLBACK_URL!)}&response_type=code&prompt=consent&site=factoriamindata.atlassian.net`;
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
       <div className="bg-white rounded-2xl shadow-xl p-10 max-w-md w-full text-center">
