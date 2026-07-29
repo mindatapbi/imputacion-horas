@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
         { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
       );
       const data = await response.json();
+      console.log("Total proyectos devueltos por Jira:", data.values?.length, "Usuario:", session.user.accountId);
       const projects = data.values?.map((p: any) => ({ key: p.key, name: p.name })) || [];
       return NextResponse.json({ projects });
     }
