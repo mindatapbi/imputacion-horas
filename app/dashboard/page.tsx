@@ -13,7 +13,7 @@ interface Entry { issueKey: string; summary: string; hours: number; minutes: num
 interface Group { parentKey: string | null; parentSummary: string | null; issues: Issue[]; }
 
 const JORNADA_HORAS = 8;
-const OBJETIVO_HORAS = 7.2;
+// const OBJETIVO_HORAS = 7.2;
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
   "In Development": { bg: "bg-blue-100", text: "text-blue-700", dot: "bg-blue-500" },
@@ -223,7 +223,7 @@ function CalendarView({ onTodayHours }: { onTodayHours: (h: number) => void }) {
     const isFuture = dateStr > today;
     if (isWeekend) return { bg: "bg-gray-50", text: "text-gray-300", bar: null, label: null };
     if (isFuture) return { bg: "bg-white", text: "text-gray-400", bar: null, label: null };
-    if (hours >= OBJETIVO_HORAS) return { bg: "bg-green-50", text: "text-green-800", bar: "bg-green-400", label: `${hours.toFixed(1)}h` };
+    if (hours >= JORNADA_HORAS) return { bg: "bg-green-50", text: "text-green-800", bar: "bg-green-400", label: `${hours.toFixed(1)}h` };
     if (hours > 0) return { bg: "bg-orange-50", text: "text-orange-800", bar: "bg-orange-400", label: `${hours.toFixed(1)}h` };
     return { bg: "bg-red-50", text: "text-red-300", bar: null, label: null };
   };
@@ -245,7 +245,7 @@ function CalendarView({ onTodayHours }: { onTodayHours: (h: number) => void }) {
         </div>
       </div>
       <div className="flex items-center gap-4 mb-4 text-xs text-gray-500">
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-400" />Completo (≥7.2h)</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-400" />Completo (8h)</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-orange-400" />Parcial</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-200" />Sin imputar</span>
       </div>
@@ -361,7 +361,7 @@ export default function Dashboard() {
   const newHoras = entries.reduce((acc, e) => acc + e.hours + e.minutes / 60, 0);
   const totalHoras = alreadyLoggedToday + newHoras;
   const porcentaje = Math.min((totalHoras / JORNADA_HORAS) * 100, 100);
-  const llegaObjetivo = totalHoras >= OBJETIVO_HORAS;
+  const llegaObjetivo = totalHoras >= JORNADA_HORAS;
 
   const filteredIssues = issues.filter(i => i.summary.toLowerCase().includes(issueSearch.toLowerCase()) || i.key.toLowerCase().includes(issueSearch.toLowerCase()));
   const groups = groupIssues(filteredIssues);
@@ -410,7 +410,7 @@ export default function Dashboard() {
           <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Horas imputadas!</h2>
           <p className="text-gray-500 mb-2">Registraste <span className="font-semibold text-gray-800">{newHoras.toFixed(1)}h</span> en Jira.</p>
           <p className="text-sm text-gray-400 mb-2">{new Date(date + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}</p>
-          {totalHoras >= OBJETIVO_HORAS && <p className="text-green-600 font-semibold text-sm mb-6">✓ Completaste el objetivo del día</p>}
+          {totalHoras >= JORNADA_HORAS && <p className="text-green-600 font-semibold text-sm mb-6">✓ Completaste la jornada del día</p>}
           <button onClick={() => { setSubmitted(false); setEntries([]); }} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-xl transition-colors">Imputar más horas</button>
         </div>
       </main>
@@ -480,7 +480,7 @@ export default function Dashboard() {
                   {alreadyLoggedToday > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-400" />{alreadyLoggedToday.toFixed(1)}h ya imputadas</span>}
                   {newHoras > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400" />{newHoras.toFixed(1)}h nuevas</span>}
                 </div>
-                {llegaObjetivo ? <p className="text-xs text-green-600 font-medium">✓ Objetivo cumplido</p> : <p className="text-xs text-gray-400">Objetivo: {OBJETIVO_HORAS}h</p>}
+                {llegaObjetivo && <p className="text-xs text-green-600 font-medium">✓ Jornada completa</p>}
               </div>
             </div>
           </div>
