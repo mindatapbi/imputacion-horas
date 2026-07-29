@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import * as XLSX from "xlsx";
 
 interface Entry {
   worklogId: string;
@@ -26,7 +27,6 @@ interface RowIssue {
   byDate: Record<string, Entry[]>;
 }
 
-const OBJETIVO_HORAS = 7.2;
 const JORNADA_HORAS = 8;
 
 const ISSUE_TYPE_STYLES: Record<string, { emoji: string; color: string }> = {
@@ -174,13 +174,70 @@ export default function TimesheetPage() {
     setDeletingId(null);
   };
 
-  // Navegación semana/mes
+  // ── EXPORTAR A EXCEL ────────────────────────────────────────────────────────
+  const exportToExcel = () => {
+    if (entries.length === 0) return;
+
+    const days = getDaysInRange(from, to);
+
+    // Construir filas por issue
+    const rowMap: Record<string, RowIssue> = {};
+    for (const entry of entries) {
+      if (!rowMap[entry.issueKey]) {
+        rowMap[entry.issueKey] = { issueKey: entry.issueKey, issueSummary: entry.issueSummary, issueType: entry.issueType, project: entry.project, totalSeconds: 0, byDate: {} };
+      }
+      if (!rowMap[entry.issueKey].byDate[entry.date]) rowMap[entry.issueKey].byDate[entry.date] = [];
+      rowMap[entry.issueKey].byDate[entry.date].push(entry);
+      rowMap[entry.issueKey].totalSeconds += entry.timeSpentSeconds;
+    }
+    const rows = Object.values(rowMap).sort((a, b) => a.issueKey.localeCompare(b.issueKey));
+
+    // Totales por día
+    const dayTotals: Record<string, number> = {};
+    for (const entry of entries) { dayTotals[entry.date] = (dayTotals[entry.date] || 0) + entry.timeSpentSeconds; }
+    const grandTotal = entries.reduce((acc, e) => acc + e.timeSpentSeconds, 0);
+
+    // Header row
+    const header = ['Clave', 'Incidencia', 'Proyecto', 'Total', ...days.map(d => fmtDate(d))];
+
+    // Data rows
+    const dataRows = rows.map(row => {
+      const dayValues = days.map(d => {
+        const dayEntries = row.byDate[d] || [];
+        const secs = dayEntries.reduce((acc, e) => acc + e.timeSpentSeconds, 0);
+        return secs > 0 ? fmtTime(secs) : '';
+      });
+      return [row.issueKey, row.issueSummary, row.project, fmtTime(row.totalSeconds), ...dayValues];
+    });
+
+    // Total row
+    const totalRow = ['', '', 'TOTAL', fmtTime(grandTotal), ...days.map(d => {
+      const secs = dayTotals[d] || 0;
+      return secs > 0 ? fmtTime(secs) : '';
+    })];
+
+    const wsData = [header, ...dataRows, totalRow];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Ancho de columnas
+    ws['!cols'] = [
+      { wch: 12 }, { wch: 40 }, { wch: 20 }, { wch: 10 },
+      ...days.map(() => ({ wch: 10 })),
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Timesheet');
+
+    const fileName = `timesheet_${from}_${to}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  };
+
+  // Navegación
   const shiftWeek = (dir: number) => {
     const f = new Date(from + "T12:00:00"); f.setDate(f.getDate() + dir * 7);
     const t = new Date(to + "T12:00:00"); t.setDate(t.getDate() + dir * 7);
     setFrom(fmt(f)); setTo(fmt(t));
   };
-
   const goThisWeek = () => { setFrom(fmt(monday)); setTo(fmt(sunday)); };
   const goThisMonth = () => {
     const f = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -188,7 +245,7 @@ export default function TimesheetPage() {
     setFrom(fmt(f)); setTo(fmt(t));
   };
 
-  // Construir estructura: filas = issues, columnas = días
+  // Estructura tabla
   const days = getDaysInRange(from, to);
   const rowMap: Record<string, RowIssue> = {};
   for (const entry of entries) {
@@ -200,8 +257,6 @@ export default function TimesheetPage() {
     rowMap[entry.issueKey].totalSeconds += entry.timeSpentSeconds;
   }
   const rows = Object.values(rowMap).sort((a, b) => a.issueKey.localeCompare(b.issueKey));
-
-  // Totales por día
   const dayTotals: Record<string, number> = {};
   for (const entry of entries) { dayTotals[entry.date] = (dayTotals[entry.date] || 0) + entry.timeSpentSeconds; }
   const grandTotal = entries.reduce((acc, e) => acc + e.timeSpentSeconds, 0);
@@ -237,7 +292,7 @@ export default function TimesheetPage() {
         {/* Controles */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
           <div className="flex flex-wrap items-center gap-3 justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button onClick={() => shiftWeek(-1)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50">
                 <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
               </button>
@@ -252,18 +307,26 @@ export default function TimesheetPage() {
               <button onClick={goThisWeek} className="text-xs font-medium text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 transition-colors">Esta semana</button>
               <button onClick={goThisMonth} className="text-xs font-medium text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 transition-colors">Este mes</button>
             </div>
-            {!loading && entries.length > 0 && (
-              <div className="flex items-center gap-4 text-sm">
-                <span className="text-gray-400">Total: <span className="font-bold text-gray-900">{fmtTime(grandTotal)}</span></span>
-                <span className="text-gray-400">Registrado: <span className="font-bold text-gray-900">{entries.length} entradas</span></span>
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              {!loading && entries.length > 0 && (
+                <span className="text-sm text-gray-400">Total: <span className="font-bold text-gray-900">{fmtTime(grandTotal)}</span></span>
+              )}
+              {/* Botón exportar */}
+              <button
+                onClick={exportToExcel}
+                disabled={entries.length === 0 || loading}
+                className="flex items-center gap-2 text-sm font-medium text-green-700 hover:bg-green-50 px-3 py-1.5 rounded-lg border border-green-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                Exportar Excel
+              </button>
+            </div>
           </div>
         </div>
 
         {error && <div className="p-3 bg-red-50 border border-red-100 rounded-xl"><p className="text-sm text-red-600">{error}</p></div>}
 
-        {/* Tabla tipo Tempo */}
+        {/* Tabla */}
         {loading ? (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 flex items-center justify-center gap-3 text-gray-400">
             <div className="w-5 h-5 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
@@ -275,14 +338,8 @@ export default function TimesheetPage() {
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    {/* Col ticket */}
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide bg-gray-50 sticky left-0 z-10 min-w-[280px] border-r border-gray-100">
-                      Incidencia
-                    </th>
-                    <th className="text-right px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide bg-gray-50 min-w-[80px]">
-                      Total
-                    </th>
-                    {/* Cols días */}
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide bg-gray-50 sticky left-0 z-10 min-w-[280px] border-r border-gray-100">Incidencia</th>
+                    <th className="text-right px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide bg-gray-50 min-w-[80px]">Total</th>
                     {days.map(d => (
                       <th key={d} className={`text-center px-2 py-3 min-w-[72px] ${isWeekend(d) ? "bg-gray-50/80" : isToday(d) ? "bg-blue-50" : "bg-gray-50"}`}>
                         <div className={`text-xs font-semibold uppercase tracking-wide ${isToday(d) ? "text-blue-600" : isWeekend(d) ? "text-gray-300" : "text-gray-400"}`}>
@@ -297,16 +354,11 @@ export default function TimesheetPage() {
                 </thead>
                 <tbody>
                   {rows.length === 0 ? (
-                    <tr>
-                      <td colSpan={days.length + 2} className="text-center py-12 text-gray-400 text-sm">
-                        No hay registros en este período
-                      </td>
-                    </tr>
+                    <tr><td colSpan={days.length + 2} className="text-center py-12 text-gray-400 text-sm">No hay registros en este período</td></tr>
                   ) : rows.map((row, rowIdx) => {
                     const typeStyle = ISSUE_TYPE_STYLES[row.issueType] || { emoji: "📄", color: "text-gray-400" };
                     return (
                       <tr key={row.issueKey} className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors ${rowIdx % 2 === 0 ? "" : "bg-gray-50/30"}`}>
-                        {/* Ticket */}
                         <td className="px-4 py-3 sticky left-0 bg-white border-r border-gray-100 z-10">
                           <div className="flex items-start gap-2">
                             <span className={`text-sm mt-0.5 ${typeStyle.color}`}>{typeStyle.emoji}</span>
@@ -314,17 +366,14 @@ export default function TimesheetPage() {
                               <p className="font-medium text-gray-900 truncate max-w-[220px]">{row.issueSummary}</p>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className="text-xs font-mono font-semibold text-blue-500">{row.issueKey}</span>
-                                <span className="text-xs text-gray-400">·</span>
-                                <span className="text-xs text-gray-400 truncate">{row.project}</span>
+                                <span className="text-xs text-gray-400">· {row.project}</span>
                               </div>
                             </div>
                           </div>
                         </td>
-                        {/* Total fila */}
                         <td className="px-3 py-3 text-right">
                           <span className="text-sm font-bold text-gray-900">{fmtTime(row.totalSeconds)}</span>
                         </td>
-                        {/* Celdas por día */}
                         {days.map(d => {
                           const dayEntries = row.byDate[d] || [];
                           const daySeconds = dayEntries.reduce((acc, e) => acc + e.timeSpentSeconds, 0);
@@ -356,7 +405,6 @@ export default function TimesheetPage() {
                     );
                   })}
                 </tbody>
-                {/* Fila de totales por día */}
                 <tfoot>
                   <tr className="border-t-2 border-gray-200 bg-gray-50">
                     <td className="px-4 py-3 sticky left-0 bg-gray-50 border-r border-gray-100 z-10">
@@ -367,12 +415,11 @@ export default function TimesheetPage() {
                     </td>
                     {days.map(d => {
                       const secs = dayTotals[d] || 0;
-                      const isComplete = secs >= OBJETIVO_HORAS * 3600;
-                      const isPartial = secs > 0 && !isComplete;
+                      const isComplete = secs >= JORNADA_HORAS * 3600;
                       return (
                         <td key={d} className={`px-2 py-3 text-center ${isWeekend(d) ? "bg-gray-100/60" : isToday(d) ? "bg-blue-50/60" : ""}`}>
                           {secs > 0 ? (
-                            <span className={`text-sm font-bold ${isComplete ? "text-green-600" : isPartial ? "text-orange-500" : "text-gray-400"}`}>
+                            <span className={`text-sm font-bold ${isComplete ? "text-green-600" : "text-orange-500"}`}>
                               {fmtTime(secs)}
                             </span>
                           ) : (
@@ -385,11 +432,9 @@ export default function TimesheetPage() {
                 </tfoot>
               </table>
             </div>
-
-            {/* Leyenda */}
             {rows.length > 0 && (
               <div className="px-4 py-3 border-t border-gray-100 flex items-center gap-4 text-xs text-gray-400">
-                <span className="flex items-center gap-1.5"><span className="font-bold text-green-600">8h</span> Día completo (≥7.2h)</span>
+                <span className="flex items-center gap-1.5"><span className="font-bold text-green-600">8h</span> Día completo</span>
                 <span className="flex items-center gap-1.5"><span className="font-bold text-orange-500">5h</span> Día parcial</span>
                 <span className="text-gray-300">Hacé click en ✏️ para editar o ✕ para eliminar</span>
               </div>
