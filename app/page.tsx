@@ -7,19 +7,19 @@ import { redirect } from "next/navigation";
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; site?: string }>;
 }) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
   const params = await searchParams;
 
   if (session.user?.accountId && session.cloudId) {
-    const token = await getToken(session.user.accountId) || 
+    const token = await getToken(session.user.accountId) ||
                   await refreshAccessToken(session.user.accountId, session.cloudId);
     if (token) redirect("/dashboard");
     else session.destroy();
   }
 
-  const authUrl = `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${process.env.ATLASSIAN_CLIENT_ID}&scope=read%3Ajira-user%20read%3Ajira-work%20write%3Ajira-work&redirect_uri=${encodeURIComponent(process.env.ATLASSIAN_CALLBACK_URL!)}&response_type=code&prompt=consent&site=factoriamindata.atlassian.net`;
+  const authUrl = `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${process.env.ATLASSIAN_CLIENT_ID}&scope=read%3Ajira-user%20read%3Ajira-work%20write%3Ajira-work&redirect_uri=${encodeURIComponent(process.env.ATLASSIAN_CALLBACK_URL!)}&response_type=code&prompt=consent`;
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
@@ -34,7 +34,16 @@ export default async function Home({
           <p className="text-gray-500 mt-2">Registrá tus horas en Jira de forma simple y rápida</p>
         </div>
 
-        {params?.error && (
+        {params?.error === 'wrong_site' && (
+          <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-xl text-left">
+            <p className="font-semibold text-orange-800 text-sm mb-1">⚠️ Sitio incorrecto</p>
+            <p className="text-orange-700 text-sm">
+              Elegiste <strong>{params.site}</strong>. Por favor iniciá sesión de nuevo y seleccioná <strong>factoriamindata.atlassian.net</strong>.
+            </p>
+          </div>
+        )}
+
+        {params?.error && params.error !== 'wrong_site' && (
           <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm">
             Error al iniciar sesión. Por favor, intentá de nuevo.
           </div>

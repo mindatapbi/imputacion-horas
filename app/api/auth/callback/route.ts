@@ -31,6 +31,15 @@ export async function GET(request: NextRequest) {
     );
     const resources = await resourcesResponse.json();
     const cloudId = resources[0]?.id;
+    const siteName = resources[0]?.name;
+
+    // Validar que el usuario eligió el sitio correcto
+    const allowedCloudId = process.env.ATLASSIAN_CLOUD_ID;
+    if (cloudId !== allowedCloudId) {
+      return NextResponse.redirect(
+        new URL(`/?error=wrong_site&site=${encodeURIComponent(siteName || '')}`, request.url)
+      );
+    }
 
     const userResponse = await fetch(
       `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/myself`,
