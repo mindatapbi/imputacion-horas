@@ -27,6 +27,12 @@ interface RowIssue {
   byDate: Record<string, Entry[]>;
 }
 
+interface NewEntry {
+  issueKey: string;
+  issueSummary: string;
+  date: string;
+}
+
 const JORNADA_HORAS = 8;
 
 const ISSUE_TYPE_STYLES: Record<string, { emoji: string; color: string }> = {
@@ -61,6 +67,7 @@ function getDaysInRange(from: string, to: string): string[] {
   return days;
 }
 
+// ── MODAL EDITAR ─────────────────────────────────────────────────────────────
 function EditModal({ entry, onSave, onClose }: { entry: Entry; onSave: (e: Entry) => void; onClose: () => void }) {
   const [hours, setHours] = useState(entry.hours);
   const [minutes, setMinutes] = useState(entry.minutes);
@@ -69,6 +76,7 @@ function EditModal({ entry, onSave, onClose }: { entry: Entry; onSave: (e: Entry
   const [error, setError] = useState("");
 
   const handleSave = async () => {
+    if (hours === 0 && minutes === 0) { setError("Poné al menos 1 minuto."); return; }
     setSaving(true); setError("");
     const res = await fetch("/api/jira/timesheet", {
       method: "PUT",
@@ -124,6 +132,95 @@ function EditModal({ entry, onSave, onClose }: { entry: Entry; onSave: (e: Entry
   );
 }
 
+// ── MODAL NUEVO REGISTRO ──────────────────────────────────────────────────────
+function NewEntryModal({ newEntry, onSave, onClose }: {
+  newEntry: NewEntry;
+  onSave: (entry: Entry) => void;
+  onClose: () => void;
+}) {
+  const [hours, setHours] = useState(0);
+  const [minutes, setMinutes] = useState(0);
+  const [comment, setComment] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSave = async () => {
+    if (hours === 0 && minutes === 0) { setError("Poné al menos 1 minuto."); return; }
+    setSaving(true); setError("");
+    const res = await fetch("/api/jira/worklog", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entries: [{ issueKey: newEntry.issueKey, hours, minutes, comment, date: newEntry.date }]
+      }),
+    });
+    const data = await res.json();
+    if (data.errors?.length > 0) {
+      setError("No se pudo registrar. Verificá que tenés acceso a este ticket.");
+      setSaving(false);
+      return;
+    }
+    // Recargar para obtener el worklogId real
+    onSave({
+      worklogId: `temp-${Date.now()}`,
+      issueKey: newEntry.issueKey,
+      issueSummary: newEntry.issueSummary,
+      issueType: "Task",
+      project: "",
+      projectKey: "",
+      date: newEntry.date,
+      hours,
+      minutes,
+      timeSpentSeconds: hours * 3600 + minutes * 60,
+      comment,
+    });
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h3 className="font-bold text-gray-900">Nuevo registro</h3>
+            <p className="text-xs text-blue-500 font-mono font-semibold mt-0.5">{newEntry.issueKey} · {fmtDate(newEntry.date)}</p>
+            <p className="text-sm text-gray-600 mt-0.5 truncate max-w-xs">{newEntry.issueSummary}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide block mb-2">Tiempo</label>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 border border-gray-200 rounded-xl px-3 py-2.5 bg-gray-50">
+                <input autoFocus type="number" min={0} max={24} value={hours} onChange={e => setHours(parseInt(e.target.value) || 0)} className="w-12 text-center text-lg font-bold text-gray-900 focus:outline-none bg-transparent" />
+                <span className="text-sm text-gray-400 font-medium">h</span>
+              </div>
+              <div className="flex items-center gap-1 border border-gray-200 rounded-xl px-3 py-2.5 bg-gray-50">
+                <input type="number" min={0} max={59} step={15} value={minutes} onChange={e => setMinutes(parseInt(e.target.value) || 0)} className="w-12 text-center text-lg font-bold text-gray-900 focus:outline-none bg-transparent" />
+                <span className="text-sm text-gray-400 font-medium">min</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide block mb-2">Comentario</label>
+            <textarea value={comment} onChange={e => setComment(e.target.value)} rows={3} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" placeholder="Comentario (opcional)" />
+          </div>
+        </div>
+        {error && <p className="text-sm text-red-500 mt-3">{error}</p>}
+        <div className="flex gap-3 mt-5">
+          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-600 font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors text-sm">Cancelar</button>
+          <button onClick={handleSave} disabled={saving} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm disabled:opacity-50">
+            {saving ? "Registrando..." : "Registrar horas"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TimesheetPage() {
   const now = new Date();
   const monday = new Date(now);
@@ -140,6 +237,7 @@ export default function TimesheetPage() {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<{ displayName: string; email: string; avatarUrl: string } | null>(null);
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
+  const [newEntry, setNewEntry] = useState<NewEntry | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
@@ -162,6 +260,13 @@ export default function TimesheetPage() {
     setEditingEntry(null);
   };
 
+  const handleSaveNew = (entry: Entry) => {
+    setEntries(prev => [...prev, entry]);
+    setNewEntry(null);
+    // Recargar para traer el worklogId real de Jira
+    fetchTimesheet();
+  };
+
   const handleDelete = async (entry: Entry) => {
     if (!confirm(`¿Eliminar ${fmtTime(entry.timeSpentSeconds)} de ${entry.issueKey}?`)) return;
     setDeletingId(entry.worklogId);
@@ -177,59 +282,29 @@ export default function TimesheetPage() {
   // ── EXPORTAR A EXCEL ────────────────────────────────────────────────────────
   const exportToExcel = () => {
     if (entries.length === 0) return;
-
     const days = getDaysInRange(from, to);
-
-    // Construir filas por issue
     const rowMap: Record<string, RowIssue> = {};
     for (const entry of entries) {
-      if (!rowMap[entry.issueKey]) {
-        rowMap[entry.issueKey] = { issueKey: entry.issueKey, issueSummary: entry.issueSummary, issueType: entry.issueType, project: entry.project, totalSeconds: 0, byDate: {} };
-      }
+      if (!rowMap[entry.issueKey]) rowMap[entry.issueKey] = { issueKey: entry.issueKey, issueSummary: entry.issueSummary, issueType: entry.issueType, project: entry.project, totalSeconds: 0, byDate: {} };
       if (!rowMap[entry.issueKey].byDate[entry.date]) rowMap[entry.issueKey].byDate[entry.date] = [];
       rowMap[entry.issueKey].byDate[entry.date].push(entry);
       rowMap[entry.issueKey].totalSeconds += entry.timeSpentSeconds;
     }
     const rows = Object.values(rowMap).sort((a, b) => a.issueKey.localeCompare(b.issueKey));
-
-    // Totales por día
     const dayTotals: Record<string, number> = {};
-    for (const entry of entries) { dayTotals[entry.date] = (dayTotals[entry.date] || 0) + entry.timeSpentSeconds; }
+    for (const entry of entries) dayTotals[entry.date] = (dayTotals[entry.date] || 0) + entry.timeSpentSeconds;
     const grandTotal = entries.reduce((acc, e) => acc + e.timeSpentSeconds, 0);
-
-    // Header row
     const header = ['Clave', 'Incidencia', 'Proyecto', 'Total', ...days.map(d => fmtDate(d))];
-
-    // Data rows
-    const dataRows = rows.map(row => {
-      const dayValues = days.map(d => {
-        const dayEntries = row.byDate[d] || [];
-        const secs = dayEntries.reduce((acc, e) => acc + e.timeSpentSeconds, 0);
-        return secs > 0 ? fmtTime(secs) : '';
-      });
-      return [row.issueKey, row.issueSummary, row.project, fmtTime(row.totalSeconds), ...dayValues];
-    });
-
-    // Total row
-    const totalRow = ['', '', 'TOTAL', fmtTime(grandTotal), ...days.map(d => {
-      const secs = dayTotals[d] || 0;
-      return secs > 0 ? fmtTime(secs) : '';
-    })];
-
-    const wsData = [header, ...dataRows, totalRow];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-    // Ancho de columnas
-    ws['!cols'] = [
-      { wch: 12 }, { wch: 40 }, { wch: 20 }, { wch: 10 },
-      ...days.map(() => ({ wch: 10 })),
-    ];
-
+    const dataRows = rows.map(row => [
+      row.issueKey, row.issueSummary, row.project, fmtTime(row.totalSeconds),
+      ...days.map(d => { const secs = (row.byDate[d] || []).reduce((acc, e) => acc + e.timeSpentSeconds, 0); return secs > 0 ? fmtTime(secs) : ''; })
+    ]);
+    const totalRow = ['', '', 'TOTAL', fmtTime(grandTotal), ...days.map(d => { const secs = dayTotals[d] || 0; return secs > 0 ? fmtTime(secs) : ''; })];
+    const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows, totalRow]);
+    ws['!cols'] = [{ wch: 12 }, { wch: 40 }, { wch: 20 }, { wch: 10 }, ...days.map(() => ({ wch: 10 }))];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Timesheet');
-
-    const fileName = `timesheet_${from}_${to}.xlsx`;
-    XLSX.writeFile(wb, fileName);
+    XLSX.writeFile(wb, `timesheet_${from}_${to}.xlsx`);
   };
 
   // Navegación
@@ -249,18 +324,15 @@ export default function TimesheetPage() {
   const days = getDaysInRange(from, to);
   const rowMap: Record<string, RowIssue> = {};
   for (const entry of entries) {
-    if (!rowMap[entry.issueKey]) {
-      rowMap[entry.issueKey] = { issueKey: entry.issueKey, issueSummary: entry.issueSummary, issueType: entry.issueType, project: entry.project, totalSeconds: 0, byDate: {} };
-    }
+    if (!rowMap[entry.issueKey]) rowMap[entry.issueKey] = { issueKey: entry.issueKey, issueSummary: entry.issueSummary, issueType: entry.issueType, project: entry.project, totalSeconds: 0, byDate: {} };
     if (!rowMap[entry.issueKey].byDate[entry.date]) rowMap[entry.issueKey].byDate[entry.date] = [];
     rowMap[entry.issueKey].byDate[entry.date].push(entry);
     rowMap[entry.issueKey].totalSeconds += entry.timeSpentSeconds;
   }
   const rows = Object.values(rowMap).sort((a, b) => a.issueKey.localeCompare(b.issueKey));
   const dayTotals: Record<string, number> = {};
-  for (const entry of entries) { dayTotals[entry.date] = (dayTotals[entry.date] || 0) + entry.timeSpentSeconds; }
+  for (const entry of entries) dayTotals[entry.date] = (dayTotals[entry.date] || 0) + entry.timeSpentSeconds;
   const grandTotal = entries.reduce((acc, e) => acc + e.timeSpentSeconds, 0);
-
   const isWeekend = (d: string) => { const dow = new Date(d + "T12:00:00").getDay(); return dow === 0 || dow === 6; };
   const isToday = (d: string) => d === today;
 
@@ -311,12 +383,8 @@ export default function TimesheetPage() {
               {!loading && entries.length > 0 && (
                 <span className="text-sm text-gray-400">Total: <span className="font-bold text-gray-900">{fmtTime(grandTotal)}</span></span>
               )}
-              {/* Botón exportar */}
-              <button
-                onClick={exportToExcel}
-                disabled={entries.length === 0 || loading}
-                className="flex items-center gap-2 text-sm font-medium text-green-700 hover:bg-green-50 px-3 py-1.5 rounded-lg border border-green-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
+              <button onClick={exportToExcel} disabled={entries.length === 0 || loading}
+                className="flex items-center gap-2 text-sm font-medium text-green-700 hover:bg-green-50 px-3 py-1.5 rounded-lg border border-green-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                 Exportar Excel
               </button>
@@ -341,7 +409,7 @@ export default function TimesheetPage() {
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide bg-gray-50 sticky left-0 z-10 min-w-[280px] border-r border-gray-100">Incidencia</th>
                     <th className="text-right px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide bg-gray-50 min-w-[80px]">Total</th>
                     {days.map(d => (
-                      <th key={d} className={`text-center px-2 py-3 min-w-[72px] ${isWeekend(d) ? "bg-gray-50/80" : isToday(d) ? "bg-blue-50" : "bg-gray-50"}`}>
+                      <th key={d} className={`text-center px-2 py-3 min-w-[80px] ${isWeekend(d) ? "bg-gray-50/80" : isToday(d) ? "bg-blue-50" : "bg-gray-50"}`}>
                         <div className={`text-xs font-semibold uppercase tracking-wide ${isToday(d) ? "text-blue-600" : isWeekend(d) ? "text-gray-300" : "text-gray-400"}`}>
                           {new Date(d + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short" })}
                         </div>
@@ -377,8 +445,9 @@ export default function TimesheetPage() {
                         {days.map(d => {
                           const dayEntries = row.byDate[d] || [];
                           const daySeconds = dayEntries.reduce((acc, e) => acc + e.timeSpentSeconds, 0);
+                          const weekend = isWeekend(d);
                           return (
-                            <td key={d} className={`px-2 py-3 text-center align-middle ${isWeekend(d) ? "bg-gray-50/60" : isToday(d) ? "bg-blue-50/40" : ""}`}>
+                            <td key={d} className={`px-2 py-2 text-center align-middle group ${weekend ? "bg-gray-50/60" : isToday(d) ? "bg-blue-50/40" : ""}`}>
                               {dayEntries.length > 0 ? (
                                 <div className="flex flex-col items-center gap-1">
                                   <span className="text-sm font-semibold text-gray-800">{fmtTime(daySeconds)}</span>
@@ -395,6 +464,15 @@ export default function TimesheetPage() {
                                     ))}
                                   </div>
                                 </div>
+                              ) : !weekend ? (
+                                // Celda vacía — mostrar + al hover
+                                <button
+                                  onClick={() => setNewEntry({ issueKey: row.issueKey, issueSummary: row.issueSummary, date: d })}
+                                  className="w-full h-8 flex items-center justify-center text-gray-200 hover:text-blue-400 hover:bg-blue-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                  title={`Agregar horas en ${fmtDate(d)}`}
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                                </button>
                               ) : (
                                 <span className="text-gray-200 text-xs">—</span>
                               )}
@@ -419,9 +497,7 @@ export default function TimesheetPage() {
                       return (
                         <td key={d} className={`px-2 py-3 text-center ${isWeekend(d) ? "bg-gray-100/60" : isToday(d) ? "bg-blue-50/60" : ""}`}>
                           {secs > 0 ? (
-                            <span className={`text-sm font-bold ${isComplete ? "text-green-600" : "text-orange-500"}`}>
-                              {fmtTime(secs)}
-                            </span>
+                            <span className={`text-sm font-bold ${isComplete ? "text-green-600" : "text-orange-500"}`}>{fmtTime(secs)}</span>
                           ) : (
                             <span className="text-gray-200 text-xs">—</span>
                           )}
@@ -436,7 +512,7 @@ export default function TimesheetPage() {
               <div className="px-4 py-3 border-t border-gray-100 flex items-center gap-4 text-xs text-gray-400">
                 <span className="flex items-center gap-1.5"><span className="font-bold text-green-600">8h</span> Día completo</span>
                 <span className="flex items-center gap-1.5"><span className="font-bold text-orange-500">5h</span> Día parcial</span>
-                <span className="text-gray-300">Hacé click en ✏️ para editar o ✕ para eliminar</span>
+                <span>Hover sobre una celda vacía para agregar horas</span>
               </div>
             )}
           </div>
@@ -444,6 +520,7 @@ export default function TimesheetPage() {
       </div>
 
       {editingEntry && <EditModal entry={editingEntry} onSave={handleSaveEdit} onClose={() => setEditingEntry(null)} />}
+      {newEntry && <NewEntryModal newEntry={newEntry} onSave={handleSaveNew} onClose={() => setNewEntry(null)} />}
     </main>
   );
 }
