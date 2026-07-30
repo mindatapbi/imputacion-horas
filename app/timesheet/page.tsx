@@ -135,8 +135,10 @@ export default function TimesheetPage() {
   const fmt = (d: Date) => d.toISOString().split("T")[0];
   const today = fmt(now);
 
-  const [from, setFrom] = useState(fmt(monday));
-  const [to, setTo] = useState(fmt(sunday));
+  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const [from, setFrom] = useState(fmt(firstOfMonth));
+  const [to, setTo] = useState(fmt(lastOfMonth));
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<{displayName:string;email:string;avatarUrl:string}|null>(null);
@@ -288,7 +290,7 @@ export default function TimesheetPage() {
                         <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide bg-[#0D0D0D] sticky left-0 z-10 min-w-[260px] border-r border-gray-700 text-white">Incidencia</th>
                         <th className="text-right px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide bg-[#0D0D0D] min-w-[70px] text-white/60">Total</th>
                         {days.map(d=>(
-                          <th key={d} className={`text-center px-2 py-3 min-w-[75px] bg-[#0D0D0D] ${d===today?"border-b-2 border-red-500":""}`}>
+                          <th key={d} className={`text-center px-1 py-3 min-w-[44px] bg-[#0D0D0D] ${d===today?"border-b-2 border-red-500":""}`}>
                             <div className={`text-xs font-semibold uppercase tracking-wide ${d===today?"text-red-400":isWE(d)?"text-white/20":"text-white/50"}`}>{new Date(d+"T12:00:00").toLocaleDateString("es-AR",{weekday:"short"})}</div>
                             <div className={`text-sm font-bold mt-0.5 ${d===today?"text-red-400":isWE(d)?"text-white/20":"text-white"}`}>{new Date(d+"T12:00:00").getDate()}</div>
                           </th>
@@ -314,7 +316,7 @@ export default function TimesheetPage() {
                               const ds=de.reduce((a,e)=>a+e.timeSpentSeconds,0);
                               const we=isWE(d);
                               return (
-                                <td key={d} className={`px-2 py-2 text-center align-middle group ${we?"bg-gray-50/60":d===today?"bg-red-50/30":""}`}>
+                                <td key={d} className={`px-1 py-2 text-center align-middle group ${we?"bg-gray-50/60":d===today?"bg-red-50/30":""}`}>
                                   {de.length>0?(
                                     <div className="flex flex-col items-center gap-1">
                                       <span className="text-sm font-semibold text-gray-800">{fmtTime(ds)}</span>
