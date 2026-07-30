@@ -200,7 +200,8 @@ function CalendarView({ onTodayHours }: { onTodayHours: (h: number) => void }) {
     const isFuture = dateStr > today;
     if (isWeekend) return { bg: "bg-gray-50", text: "text-gray-300", bar: null, label: null };
     if (isFuture) return { bg: "bg-white", text: "text-gray-400", bar: null, label: null };
-    if (hours >= JORNADA_HORAS) return { bg: "bg-green-50", text: "text-green-800", bar: "bg-green-500", label: `${hours.toFixed(1)}h` };
+    if (hours > JORNADA_HORAS) return { bg: "bg-red-50", text: "text-red-700", bar: "bg-red-500", label: `⚠ ${hours.toFixed(1)}h` };
+if (hours >= JORNADA_HORAS) return { bg: "bg-green-50", text: "text-green-800", bar: "bg-green-500", label: `${hours.toFixed(1)}h` };
     if (hours > 0) return { bg: "bg-orange-50", text: "text-orange-800", bar: "bg-orange-400", label: `${hours.toFixed(1)}h` };
     return { bg: "bg-red-50", text: "text-red-300", bar: null, label: null };
   };
