@@ -363,11 +363,10 @@ export default function Dashboard() {
       <header className="bg-[#0D0D0D] px-6 py-3 sticky top-0 z-10 shadow-lg">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center shadow-sm shadow-red-900">
-              <svg style={{width:18,height:18}} className="text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            </div>
-            <span className="font-bold text-white text-sm tracking-wide">Imputación de Horas</span>
-          </div>
+  <img src="/mindata-logo.png" alt="Mindata" className="h-7 w-auto" />
+  <span className="text-white/30 text-sm">|</span>
+  <span className="font-semibold text-white/80 text-sm tracking-wide">Carga de Horas</span>
+</div>
           <nav className="flex items-center gap-1 bg-white/10 rounded-xl p-1">
             <span className="px-4 py-1.5 text-sm font-semibold text-white bg-red-600 rounded-lg">Dashboard</span>
             <Link href="/timesheet" className="px-4 py-1.5 text-sm font-medium text-white/60 hover:text-white rounded-lg transition-colors">Timesheet</Link>
