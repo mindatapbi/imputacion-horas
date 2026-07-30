@@ -221,7 +221,7 @@ export default function TimesheetPage() {
       {/* BODY */}
       <div className="flex h-[calc(100vh-57px)]">
         {/* PANEL IZQUIERDO */}
-        <div className="w-80 flex-shrink-0 bg-white border-r border-gray-100 flex flex-col overflow-hidden">
+        <div className="w-100 flex-shrink-0 bg-white border-r border-gray-100 flex flex-col overflow-hidden">
           <div className="p-3 border-b border-gray-100 bg-gray-50">
             <h2 className="font-bold text-gray-900 text-sm">Agregar horas</h2>
             <p className="text-xs text-gray-400 mt-0.5">Elegí proyecto, ticket y fecha</p>
