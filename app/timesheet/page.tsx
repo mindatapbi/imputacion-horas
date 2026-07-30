@@ -6,17 +6,19 @@ import * as XLSX from "xlsx";
 
 interface Entry {
   worklogId: string; issueKey: string; issueSummary: string; issueType: string;
-  project: string; projectKey: string; date: string; hours: number; minutes: number;
+  project: string; projectKey: string;
+  parentKey: string | null; parentSummary: string | null;
+  date: string; hours: number; minutes: number;
   timeSpentSeconds: number; comment: string;
 }
-interface RowIssue { issueKey: string; issueSummary: string; issueType: string; project: string; totalSeconds: number; byDate: Record<string, Entry[]>; }
+interface EpicGroup { parentKey: string | null; parentSummary: string | null; issues: IssueRow[]; totalSeconds: number; }
+interface IssueRow { issueKey: string; issueSummary: string; issueType: string; project: string; totalSeconds: number; byDate: Record<string, Entry[]>; }
 interface NewEntry { issueKey: string; issueSummary: string; date: string; }
 interface Project { key: string; name: string; }
 interface Issue { key: string; summary: string; status: string; project: string; issueType: string; parentKey: string | null; parentSummary: string | null; }
-interface Group { parentKey: string | null; parentSummary: string | null; issues: Issue[]; }
+interface IssueGroup { parentKey: string | null; parentSummary: string | null; issues: Issue[]; }
 
 const JORNADA_HORAS = 8;
-
 const ISSUE_TYPE_STYLES: Record<string, { emoji: string; color: string }> = {
   "Epic": { emoji: "⚡", color: "text-purple-500" }, "Story": { emoji: "📗", color: "text-green-500" },
   "Task": { emoji: "✅", color: "text-blue-500" }, "Sub-task": { emoji: "↳", color: "text-gray-400" }, "Bug": { emoji: "🐛", color: "text-red-500" },
@@ -24,11 +26,33 @@ const ISSUE_TYPE_STYLES: Record<string, { emoji: string; color: string }> = {
 
 function fmtTime(s: number) { if (!s) return ""; const h = Math.floor(s/3600), m = Math.floor((s%3600)/60); return m ? (h ? `${h}h ${m}m` : `${m}m`) : `${h}h`; }
 function fmtDate(d: string) { return new Date(d+"T12:00:00").toLocaleDateString("es-AR",{weekday:"short",day:"numeric",month:"short"}); }
-function getDays(from: string, to: string) { const days=[]; const c=new Date(from+"T12:00:00"), e=new Date(to+"T12:00:00"); while(c<=e){days.push(c.toISOString().split("T")[0]);c.setDate(c.getDate()+1);} return days; }
-function groupIssues(issues: Issue[]): Group[] {
-  const g: Record<string,Group>={};
+function getDays(from: string, to: string) { const days: string[]=[]; const c=new Date(from+"T12:00:00"), e=new Date(to+"T12:00:00"); while(c<=e){days.push(c.toISOString().split("T")[0]);c.setDate(c.getDate()+1);} return days; }
+
+function groupIssuesForPanel(issues: Issue[]): IssueGroup[] {
+  const g: Record<string,IssueGroup>={};
   for(const i of issues){const k=i.parentKey||"__none__";if(!g[k])g[k]={parentKey:i.parentKey,parentSummary:i.parentSummary,issues:[]};g[k].issues.push(i);}
   return Object.values(g).sort((a,b)=>a.parentKey===null?1:b.parentKey===null?-1:(a.parentKey||"").localeCompare(b.parentKey||""));
+}
+
+function buildEpicGroups(entries: Entry[]): EpicGroup[] {
+  const epicMap: Record<string, EpicGroup> = {};
+  for (const entry of entries) {
+    const epicKey = entry.parentKey || "__none__";
+    if (!epicMap[epicKey]) {
+      epicMap[epicKey] = { parentKey: entry.parentKey, parentSummary: entry.parentSummary, issues: [], totalSeconds: 0 };
+    }
+    const epic = epicMap[epicKey];
+    epic.totalSeconds += entry.timeSpentSeconds;
+    let issueRow = epic.issues.find(i => i.issueKey === entry.issueKey);
+    if (!issueRow) {
+      issueRow = { issueKey: entry.issueKey, issueSummary: entry.issueSummary, issueType: entry.issueType, project: entry.project, totalSeconds: 0, byDate: {} };
+      epic.issues.push(issueRow);
+    }
+    if (!issueRow.byDate[entry.date]) issueRow.byDate[entry.date] = [];
+    issueRow.byDate[entry.date].push(entry);
+    issueRow.totalSeconds += entry.timeSpentSeconds;
+  }
+  return Object.values(epicMap).sort((a, b) => a.parentKey === null ? 1 : b.parentKey === null ? -1 : (a.parentKey||"").localeCompare(b.parentKey||""));
 }
 
 function ProjectSelector({ projects, value, onChange }: { projects: Project[]; value: string; onChange: (k: string) => void }) {
@@ -50,7 +74,7 @@ function ProjectSelector({ projects, value, onChange }: { projects: Project[]; v
   );
 }
 
-function EpicGroup({ group, onAdd }: { group: Group; onAdd: (i: Issue) => void }) {
+function PanelEpicGroup({ group, onAdd }: { group: IssueGroup; onAdd: (i: Issue) => void }) {
   const [collapsed, setCollapsed] = useState(true);
   const isEpic = !!group.parentKey;
   return (
@@ -91,13 +115,13 @@ function EntryModal({ title, issueKey, issueSummary, date, initialHours=0, initi
     setSaving(true);setError("");
     if (worklogId) {
       const res = await fetch("/api/jira/timesheet",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({issueKey,worklogId,hours,minutes,comment,date})});
-      if(res.ok)onSave({worklogId,issueKey,issueSummary,issueType:"Task",project:"",projectKey:"",date,hours,minutes,timeSpentSeconds:hours*3600+minutes*60,comment});
+      if(res.ok)onSave({worklogId,issueKey,issueSummary,issueType:"Task",project:"",projectKey:"",parentKey:null,parentSummary:null,date,hours,minutes,timeSpentSeconds:hours*3600+minutes*60,comment});
       else setError("No se pudo guardar.");
     } else {
       const res = await fetch("/api/jira/worklog",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({entries:[{issueKey,hours,minutes,comment,date}]})});
       const data = await res.json();
       if(data.errors?.length>0)setError("No se pudo registrar.");
-      else onSave({worklogId:`temp-${Date.now()}`,issueKey,issueSummary,issueType:"Task",project:"",projectKey:"",date,hours,minutes,timeSpentSeconds:hours*3600+minutes*60,comment});
+      else onSave({worklogId:`temp-${Date.now()}`,issueKey,issueSummary,issueType:"Task",project:"",projectKey:"",parentKey:null,parentSummary:null,date,hours,minutes,timeSpentSeconds:hours*3600+minutes*60,comment});
     }
     setSaving(false);
   };
@@ -130,13 +154,11 @@ function EntryModal({ title, issueKey, issueSummary, date, initialHours=0, initi
 
 export default function TimesheetPage() {
   const now = new Date();
-  const monday = new Date(now); monday.setDate(now.getDate()-((now.getDay()+6)%7));
-  const sunday = new Date(monday); sunday.setDate(monday.getDate()+6);
+  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   const fmt = (d: Date) => d.toISOString().split("T")[0];
   const today = fmt(now);
 
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const lastOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   const [from, setFrom] = useState(fmt(firstOfMonth));
   const [to, setTo] = useState(fmt(lastOfMonth));
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -153,6 +175,7 @@ export default function TimesheetPage() {
   const [loadingIssues, setLoadingIssues] = useState(false);
   const [issueSearch, setIssueSearch] = useState("");
   const [quickDate, setQuickDate] = useState(today);
+  const [collapsedEpics, setCollapsedEpics] = useState<Record<string, boolean>>({});
 
   useEffect(()=>{fetchUser();fetchProjects();},[]);
   useEffect(()=>{if(from&&to&&from<=to)fetchTimesheet();},[from,to]);
@@ -161,52 +184,69 @@ export default function TimesheetPage() {
   const fetchUser=async()=>{const r=await fetch("/api/auth/me");if(r.ok){const d=await r.json();setUser(d.user);}};
   const fetchProjects=async()=>{setLoadingProjects(true);const r=await fetch("/api/jira/issues");if(r.ok){const d=await r.json();setProjects(d.projects||[]);}setLoadingProjects(false);};
   const fetchIssues=async(pk:string)=>{setLoadingIssues(true);const r=await fetch(`/api/jira/issues?project=${pk}`);if(r.ok){const d=await r.json();setIssues(d.issues||[]);}setLoadingIssues(false);};
-  const fetchTimesheet=async()=>{setLoading(true);setError("");const r=await fetch(`/api/jira/timesheet?from=${from}&to=${to}`);if(r.status===401){window.location.href="/";return;}if(r.ok){const d=await r.json();setEntries(d.entries||[]);}else setError("Error al cargar el timesheet.");setLoading(false);};
+  const fetchTimesheet=async()=>{
+    setLoading(true);setError("");
+    const r=await fetch(`/api/jira/timesheet?from=${from}&to=${to}`);
+    if(r.status===401){window.location.href="/";return;}
+    if(r.ok){const d=await r.json();setEntries(d.entries||[]);}
+    else setError("Error al cargar el timesheet.");
+    setLoading(false);
+  };
   const handleSaveEdit=(updated:Entry)=>{setEntries(prev=>prev.map(e=>e.worklogId===updated.worklogId?updated:e));setEditingEntry(null);};
   const handleSaveNew=(_:Entry)=>{setNewEntry(null);fetchTimesheet();};
-  const handleDelete=async(entry:Entry)=>{if(!confirm(`¿Eliminar ${fmtTime(entry.timeSpentSeconds)} de ${entry.issueKey}?`))return;setDeletingId(entry.worklogId);const r=await fetch("/api/jira/timesheet",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({issueKey:entry.issueKey,worklogId:entry.worklogId})});if(r.ok)setEntries(prev=>prev.filter(e=>e.worklogId!==entry.worklogId));else setError("No se pudo eliminar.");setDeletingId(null);};
+  const handleDelete=async(entry:Entry)=>{
+    if(!confirm(`¿Eliminar ${fmtTime(entry.timeSpentSeconds)} de ${entry.issueKey}?`))return;
+    setDeletingId(entry.worklogId);
+    const r=await fetch("/api/jira/timesheet",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({issueKey:entry.issueKey,worklogId:entry.worklogId})});
+    if(r.ok)setEntries(prev=>prev.filter(e=>e.worklogId!==entry.worklogId));
+    else setError("No se pudo eliminar.");
+    setDeletingId(null);
+  };
+
+  const toggleEpic = (key: string) => setCollapsedEpics(prev => ({ ...prev, [key]: !prev[key] }));
 
   const exportToExcel=()=>{
     if(!entries.length)return;
     const days=getDays(from,to);
-    const rowMap:Record<string,RowIssue>={};
-    for(const e of entries){if(!rowMap[e.issueKey])rowMap[e.issueKey]={issueKey:e.issueKey,issueSummary:e.issueSummary,issueType:e.issueType,project:e.project,totalSeconds:0,byDate:{}};if(!rowMap[e.issueKey].byDate[e.date])rowMap[e.issueKey].byDate[e.date]=[];rowMap[e.issueKey].byDate[e.date].push(e);rowMap[e.issueKey].totalSeconds+=e.timeSpentSeconds;}
-    const rows=Object.values(rowMap).sort((a,b)=>a.issueKey.localeCompare(b.issueKey));
+    const rowMap:Record<string,{key:string;summary:string;project:string;epic:string;totalSeconds:number;byDate:Record<string,number>}>={};
+    for(const e of entries){
+      if(!rowMap[e.issueKey])rowMap[e.issueKey]={key:e.issueKey,summary:e.issueSummary,project:e.project,epic:e.parentSummary||"Sin épica",totalSeconds:0,byDate:{}};
+      rowMap[e.issueKey].byDate[e.date]=(rowMap[e.issueKey].byDate[e.date]||0)+e.timeSpentSeconds;
+      rowMap[e.issueKey].totalSeconds+=e.timeSpentSeconds;
+    }
+    const rows=Object.values(rowMap).sort((a,b)=>a.epic.localeCompare(b.epic)||a.key.localeCompare(b.key));
     const dt:Record<string,number>={};for(const e of entries)dt[e.date]=(dt[e.date]||0)+e.timeSpentSeconds;
     const gt=entries.reduce((acc,e)=>acc+e.timeSpentSeconds,0);
     const ws=XLSX.utils.aoa_to_sheet([
-      ['Clave','Incidencia','Proyecto','Total',...days.map(d=>fmtDate(d))],
-      ...rows.map(r=>[r.issueKey,r.issueSummary,r.project,fmtTime(r.totalSeconds),...days.map(d=>{const s=(r.byDate[d]||[]).reduce((a,e)=>a+e.timeSpentSeconds,0);return s?fmtTime(s):'';})]),
-      ['','','TOTAL',fmtTime(gt),...days.map(d=>{const s=dt[d]||0;return s?fmtTime(s):'';})],
+      ['Épica','Clave','Incidencia','Proyecto','Total',...days.map(d=>fmtDate(d))],
+      ...rows.map(r=>[r.epic,r.key,r.summary,r.project,fmtTime(r.totalSeconds),...days.map(d=>{const s=r.byDate[d]||0;return s?fmtTime(s):'';})]),
+      ['','','','TOTAL',fmtTime(gt),...days.map(d=>{const s=dt[d]||0;return s?fmtTime(s):'';})],
     ]);
-    ws['!cols']=[{wch:12},{wch:40},{wch:20},{wch:10},...days.map(()=>({wch:10}))];
+    ws['!cols']=[{wch:30},{wch:12},{wch:40},{wch:20},{wch:10},...days.map(()=>({wch:10}))];
     const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Timesheet');XLSX.writeFile(wb,`timesheet_${from}_${to}.xlsx`);
   };
 
   const shiftWeek=(dir:number)=>{const f=new Date(from+"T12:00:00");f.setDate(f.getDate()+dir*7);const t=new Date(to+"T12:00:00");t.setDate(t.getDate()+dir*7);setFrom(fmt(f));setTo(fmt(t));};
-  const goThisWeek=()=>{setFrom(fmt(monday));setTo(fmt(sunday));};
-  const goThisMonth=()=>{const f=new Date(now.getFullYear(),now.getMonth(),1);const t=new Date(now.getFullYear(),now.getMonth()+1,0);setFrom(fmt(f));setTo(fmt(t));};
+  const goThisWeek=()=>{const m=new Date(now);m.setDate(now.getDate()-((now.getDay()+6)%7));const s=new Date(m);s.setDate(m.getDate()+6);setFrom(fmt(m));setTo(fmt(s));};
+  const goThisMonth=()=>{setFrom(fmt(firstOfMonth));setTo(fmt(lastOfMonth));};
 
   const days=getDays(from,to);
-  const rowMap:Record<string,RowIssue>={};
-  for(const e of entries){if(!rowMap[e.issueKey])rowMap[e.issueKey]={issueKey:e.issueKey,issueSummary:e.issueSummary,issueType:e.issueType,project:e.project,totalSeconds:0,byDate:{}};if(!rowMap[e.issueKey].byDate[e.date])rowMap[e.issueKey].byDate[e.date]=[];rowMap[e.issueKey].byDate[e.date].push(e);rowMap[e.issueKey].totalSeconds+=e.timeSpentSeconds;}
-  const rows=Object.values(rowMap).sort((a,b)=>a.issueKey.localeCompare(b.issueKey));
+  const epicGroups=buildEpicGroups(entries);
   const dt:Record<string,number>={};for(const e of entries)dt[e.date]=(dt[e.date]||0)+e.timeSpentSeconds;
   const gt=entries.reduce((acc,e)=>acc+e.timeSpentSeconds,0);
   const isWE=(d:string)=>{const dow=new Date(d+"T12:00:00").getDay();return dow===0||dow===6;};
   const filteredIssues=issues.filter(i=>i.summary.toLowerCase().includes(issueSearch.toLowerCase())||i.key.toLowerCase().includes(issueSearch.toLowerCase()));
-  const groups=groupIssues(filteredIssues);
+  const panelGroups=groupIssuesForPanel(filteredIssues);
 
   return (
     <main className="min-h-screen bg-gray-50">
-      {/* HEADER */}
       <header className="bg-[#0D0D0D] px-6 py-3 sticky top-0 z-10 shadow-lg">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-  <img src="/mindata-logo.png" alt="Mindata" className="h-7 w-auto" />
-  <span className="text-white/30 text-sm">|</span>
-  <span className="font-semibold text-white/80 text-sm tracking-wide">Carga de Horas</span>
-</div>
+            <img src="/mindata-logo.png" alt="Mindata" className="h-7 w-auto" />
+            <span className="text-white/30 text-sm">|</span>
+            <span className="font-semibold text-white/80 text-sm tracking-wide">Carga de Horas</span>
+          </div>
           <nav className="flex items-center gap-1 bg-white/10 rounded-xl p-1">
             <Link href="/dashboard" className="px-4 py-1.5 text-sm font-medium text-white/60 hover:text-white rounded-lg transition-colors">Dashboard</Link>
             <span className="px-4 py-1.5 text-sm font-semibold text-white bg-red-600 rounded-lg">Timesheet</span>
@@ -219,10 +259,9 @@ export default function TimesheetPage() {
         </div>
       </header>
 
-      {/* BODY */}
       <div className="flex h-[calc(100vh-57px)]">
         {/* PANEL IZQUIERDO */}
-        <div className="w-100 flex-shrink-0 bg-white border-r border-gray-100 flex flex-col overflow-hidden">
+        <div className="w-[320px] flex-shrink-0 bg-white border-r border-gray-100 flex flex-col overflow-hidden">
           <div className="p-3 border-b border-gray-100 bg-gray-50">
             <h2 className="font-bold text-gray-900 text-sm">Agregar horas</h2>
             <p className="text-xs text-gray-400 mt-0.5">Elegí proyecto, ticket y fecha</p>
@@ -242,7 +281,7 @@ export default function TimesheetPage() {
             {loadingIssues?<div className="flex items-center justify-center gap-2 py-6 text-xs text-gray-400"><div className="w-3 h-3 border-2 border-gray-200 border-t-red-500 rounded-full animate-spin"/>Cargando...</div>
             :!selectedProject?<div className="text-center py-6"><div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2"><svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg></div><p className="text-xs text-gray-400">Elegí un proyecto</p></div>
             :filteredIssues.length===0?<p className="text-xs text-gray-400 text-center py-4">Sin tickets activos</p>
-            :groups.map(g=><EpicGroup key={g.parentKey||"__none__"} group={g} onAdd={i=>setNewEntry({issueKey:i.key,issueSummary:i.summary,date:quickDate})}/>)}
+            :panelGroups.map(g=><PanelEpicGroup key={g.parentKey||"__none__"} group={g} onAdd={i=>setNewEntry({issueKey:i.key,issueSummary:i.summary,date:quickDate})}/>)}
           </div>
         </div>
 
@@ -286,8 +325,8 @@ export default function TimesheetPage() {
                   <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr className="border-b-2 border-gray-100">
-                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide bg-[#0D0D0D] sticky left-0 z-10 min-w-[260px] border-r border-gray-700 text-white">Incidencia</th>
-                        <th className="text-right px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide bg-[#0D0D0D] min-w-[70px] text-white/60">Total</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-white uppercase tracking-wide bg-[#0D0D0D] sticky left-0 z-10 min-w-[260px] border-r border-gray-700">Incidencia</th>
+                        <th className="text-right px-3 py-3 text-xs font-semibold text-white/60 uppercase tracking-wide bg-[#0D0D0D] min-w-[70px]">Total</th>
                         {days.map(d=>(
                           <th key={d} className={`text-center px-1 py-3 min-w-[44px] bg-[#0D0D0D] ${d===today?"border-b-2 border-red-500":""}`}>
                             <div className={`text-xs font-semibold uppercase tracking-wide ${d===today?"text-red-400":isWE(d)?"text-white/20":"text-white/50"}`}>{new Date(d+"T12:00:00").toLocaleDateString("es-AR",{weekday:"short"})}</div>
@@ -297,44 +336,69 @@ export default function TimesheetPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.length===0?(
+                      {epicGroups.length===0?(
                         <tr><td colSpan={days.length+2} className="text-center py-12 text-gray-400 text-sm">No hay registros en este período</td></tr>
-                      ):rows.map((row,ri)=>{
-                        const ts=ISSUE_TYPE_STYLES[row.issueType]||{emoji:"📄",color:"text-gray-400"};
+                      ):epicGroups.map(epic=>{
+                        const epicKey = epic.parentKey || "__none__";
+                        const isCollapsed = collapsedEpics[epicKey] ?? false;
+                        const isEpic = !!epic.parentKey;
                         return (
-                          <tr key={row.issueKey} className={`border-b border-gray-50 hover:bg-red-50/20 transition-colors ${ri%2===0?"":"bg-gray-50/30"}`}>
-                            <td className="px-4 py-3 sticky left-0 bg-white border-r border-gray-100 z-10">
-                              <div className="flex items-start gap-2">
-                                <span className={`text-sm mt-0.5 ${ts.color}`}>{ts.emoji}</span>
-                                <div className="min-w-0"><p className="font-medium text-gray-900 truncate max-w-[200px]">{row.issueSummary}</p><div className="flex items-center gap-1.5 mt-0.5"><span className="text-xs font-mono font-semibold text-red-500">{row.issueKey}</span><span className="text-xs text-gray-400">· {row.project}</span></div></div>
-                              </div>
-                            </td>
-                            <td className="px-3 py-3 text-right"><span className="text-sm font-bold text-gray-900">{fmtTime(row.totalSeconds)}</span></td>
-                            {days.map(d=>{
-                              const de=row.byDate[d]||[];
-                              const ds=de.reduce((a,e)=>a+e.timeSpentSeconds,0);
-                              const we=isWE(d);
+                          <>
+                            {/* Fila de épica */}
+                            <tr key={`epic-${epicKey}`} className="border-b border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors" onClick={()=>toggleEpic(epicKey)}>
+                              <td className="px-4 py-2 sticky left-0 bg-gray-50 border-r border-gray-200 z-10" colSpan={1}>
+                                <div className="flex items-center gap-2">
+                                  <svg className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${isCollapsed?"-rotate-90":""}`} fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
+                                  {isEpic?<><span className="text-purple-500">⚡</span><span className="text-xs font-bold text-gray-700 truncate">{epic.parentSummary}</span><span className="text-xs text-red-500 font-mono ml-1">{epic.parentKey}</span></>:<span className="text-xs font-bold text-gray-400">Sin épica</span>}
+                                  <span className="text-xs text-gray-400 ml-1">({epic.issues.length} ticket{epic.issues.length>1?"s":""})</span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 text-right"><span className="text-xs font-bold text-gray-600">{fmtTime(epic.totalSeconds)}</span></td>
+                              {days.map(d=>{
+                                const secs=epic.issues.reduce((acc,i)=>{const de=i.byDate[d]||[];return acc+de.reduce((a,e)=>a+e.timeSpentSeconds,0);},0);
+                                return <td key={d} className={`px-1 py-2 text-center ${isWE(d)?"bg-gray-100/60":""}`}>{secs>0?<span className="text-xs font-semibold text-gray-500">{fmtTime(secs)}</span>:<span className="text-gray-200 text-xs">—</span>}</td>;
+                              })}
+                            </tr>
+                            {/* Filas de tickets (colapsables) */}
+                            {!isCollapsed && epic.issues.map((row, ri)=>{
+                              const ts=ISSUE_TYPE_STYLES[row.issueType]||{emoji:"📄",color:"text-gray-400"};
                               return (
-                                <td key={d} className={`px-1 py-2 text-center align-middle group ${we?"bg-gray-50/60":d===today?"bg-red-50/30":""}`}>
-                                  {de.length>0?(
-                                    <div className="flex flex-col items-center gap-1">
-                                      <span className="text-sm font-semibold text-gray-800">{fmtTime(ds)}</span>
-                                      <div className="flex items-center gap-0.5">{de.map(e=>(
-                                        <div key={e.worklogId} className="flex items-center gap-0.5">
-                                          <button onClick={()=>setEditingEntry(e)} title="Editar" className="text-gray-300 hover:text-red-500 transition-colors"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
-                                          <button onClick={()=>handleDelete(e)} disabled={deletingId===e.worklogId} title="Eliminar" className="text-gray-300 hover:text-red-500 transition-colors"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg></button>
-                                        </div>
-                                      ))}</div>
+                                <tr key={row.issueKey} className={`border-b border-gray-50 hover:bg-red-50/10 transition-colors ${ri%2===0?"":"bg-gray-50/20"}`}>
+                                  <td className="px-4 py-3 sticky left-0 bg-white border-r border-gray-100 z-10 pl-8">
+                                    <div className="flex items-start gap-2">
+                                      <span className={`text-sm mt-0.5 ${ts.color}`}>{ts.emoji}</span>
+                                      <div className="min-w-0"><p className="font-medium text-gray-900 truncate max-w-[200px]">{row.issueSummary}</p><div className="flex items-center gap-1.5 mt-0.5"><span className="text-xs font-mono font-semibold text-red-500">{row.issueKey}</span><span className="text-xs text-gray-400">· {row.project}</span></div></div>
                                     </div>
-                                  ):!we?(
-                                    <button onClick={()=>setNewEntry({issueKey:row.issueKey,issueSummary:row.issueSummary,date:d})} className="w-full h-8 flex items-center justify-center text-gray-200 hover:text-red-400 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100" title={`Agregar horas en ${fmtDate(d)}`}>
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
-                                    </button>
-                                  ):<span className="text-gray-200 text-xs">—</span>}
-                                </td>
+                                  </td>
+                                  <td className="px-3 py-3 text-right"><span className="text-sm font-bold text-gray-900">{fmtTime(row.totalSeconds)}</span></td>
+                                  {days.map(d=>{
+                                    const de=row.byDate[d]||[];
+                                    const ds=de.reduce((a,e)=>a+e.timeSpentSeconds,0);
+                                    const we=isWE(d);
+                                    return (
+                                      <td key={d} className={`px-1 py-2 text-center align-middle group ${we?"bg-gray-50/60":d===today?"bg-red-50/30":""}`}>
+                                        {de.length>0?(
+                                          <div className="flex flex-col items-center gap-1">
+                                            <span className="text-sm font-semibold text-gray-800">{fmtTime(ds)}</span>
+                                            <div className="flex items-center gap-0.5">{de.map(e=>(
+                                              <div key={e.worklogId} className="flex items-center gap-0.5">
+                                                <button onClick={()=>setEditingEntry(e)} title="Editar" className="text-gray-300 hover:text-red-500 transition-colors"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
+                                                <button onClick={()=>handleDelete(e)} disabled={deletingId===e.worklogId} title="Eliminar" className="text-gray-300 hover:text-red-500 transition-colors"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg></button>
+                                              </div>
+                                            ))}</div>
+                                          </div>
+                                        ):!we?(
+                                          <button onClick={()=>setNewEntry({issueKey:row.issueKey,issueSummary:row.issueSummary,date:d})} className="w-full h-8 flex items-center justify-center text-gray-200 hover:text-red-400 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100" title={`Agregar horas en ${fmtDate(d)}`}>
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
+                                          </button>
+                                        ):<span className="text-gray-200 text-xs">—</span>}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
                               );
                             })}
-                          </tr>
+                          </>
                         );
                       })}
                     </tbody>
@@ -343,17 +407,18 @@ export default function TimesheetPage() {
                         <td className="px-4 py-3 sticky left-0 bg-[#0D0D0D] border-r border-gray-700 z-10"><span className="text-xs font-bold text-white uppercase tracking-wide">Total</span></td>
                         <td className="px-3 py-3 text-right bg-[#0D0D0D]"><span className="text-sm font-bold text-white">{fmtTime(gt)}</span></td>
                         {days.map(d=>{
-                          const s=dt[d]||0;const ic=s>=JORNADA_HORAS*3600;
-                          return <td key={d} className={`px-2 py-3 text-center bg-[#0D0D0D] ${isWE(d)?"opacity-30":""}`}>{s>0?<span className={`text-sm font-bold ${s>JORNADA_HORAS*3600?"text-red-400":ic?"text-green-400":"text-orange-400"}`}>{s>JORNADA_HORAS*3600?"⚠ ":""}{fmtTime(s)}</span>:<span className="text-white/20 text-xs">—</span>}</td>;
+                          const s=dt[d]||0;const ic=s>=JORNADA_HORAS*3600;const over=s>JORNADA_HORAS*3600;
+                          return <td key={d} className={`px-1 py-3 text-center bg-[#0D0D0D] ${isWE(d)?"opacity-30":""}`}>{s>0?<span className={`text-sm font-bold ${over?"text-red-400":ic?"text-green-400":"text-orange-400"}`}>{over?"⚠ ":""}{fmtTime(s)}</span>:<span className="text-white/20 text-xs">—</span>}</td>;
                         })}
                       </tr>
                     </tfoot>
                   </table>
                 </div>
-                {rows.length>0&&<div className="px-4 py-3 border-t border-gray-100 flex items-center gap-4 text-xs text-gray-400">
+                {epicGroups.length>0&&<div className="px-4 py-3 border-t border-gray-100 flex items-center gap-4 text-xs text-gray-400">
                   <span className="flex items-center gap-1.5"><span className="font-bold text-green-600">8h</span> Día completo</span>
                   <span className="flex items-center gap-1.5"><span className="font-bold text-orange-500">5h</span> Día parcial</span>
-                  <span>Hover sobre celda vacía para agregar · Panel izquierdo para tickets nuevos</span>
+                  <span className="flex items-center gap-1.5"><span className="font-bold text-red-500">⚠</span> Más de 8h</span>
+                  <span>Click en la épica para colapsar · Hover en celda vacía para agregar</span>
                 </div>}
               </div>
             )}

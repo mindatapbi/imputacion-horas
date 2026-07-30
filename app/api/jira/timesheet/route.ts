@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   try {
     const jql = encodeURIComponent(`worklogAuthor = currentUser() AND worklogDate >= "${from}" AND worklogDate <= "${to}"`);
     const issuesRes = await fetch(
-      `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,project,issuetype&maxResults=100`,
+      `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,project,issuetype,parent&maxResults=100`,
       { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
     );
     const issuesData = await issuesRes.json();
@@ -38,17 +38,24 @@ export async function GET(request: NextRequest) {
         if (date < from || date > to) continue;
         const comment = wl.comment?.content?.[0]?.content?.[0]?.text || "";
         entries.push({
-          worklogId: wl.id, issueKey: issue.key, issueSummary: issue.fields.summary,
+          worklogId: wl.id,
+          issueKey: issue.key,
+          issueSummary: issue.fields.summary,
           issueType: issue.fields.issuetype?.name || "Task",
-          project: issue.fields.project?.name, projectKey: issue.fields.project?.key,
-          date, hours: Math.floor(wl.timeSpentSeconds / 3600),
+          project: issue.fields.project?.name,
+          projectKey: issue.fields.project?.key,
+          parentKey: issue.fields.parent?.key || null,
+          parentSummary: issue.fields.parent?.fields?.summary || null,
+          date,
+          hours: Math.floor(wl.timeSpentSeconds / 3600),
           minutes: Math.floor((wl.timeSpentSeconds % 3600) / 60),
-          timeSpentSeconds: wl.timeSpentSeconds, comment,
+          timeSpentSeconds: wl.timeSpentSeconds,
+          comment,
         });
       }
     }));
 
-    entries.sort((a, b) => a.date.localeCompare(b.date) || a.issueKey.localeCompare(b.issueKey));
+    entries.sort((a, b) => (a.parentKey || "").localeCompare(b.parentKey || "") || a.issueKey.localeCompare(b.issueKey) || a.date.localeCompare(b.date));
     return NextResponse.json({ entries });
   } catch (error) {
     return NextResponse.json({ error: "Error al obtener timesheet" }, { status: 500 });
