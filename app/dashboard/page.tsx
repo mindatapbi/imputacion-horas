@@ -316,7 +316,8 @@ export default function Dashboard() {
   const newHoras = entries.reduce((acc, e) => acc + e.hours + e.minutes / 60, 0);
   const totalHoras = alreadyLoggedToday + newHoras;
   const porcentaje = Math.min((totalHoras / JORNADA_HORAS) * 100, 100);
-  const llegaObjetivo = totalHoras >= JORNADA_HORAS;
+const llegaObjetivo = totalHoras >= JORNADA_HORAS;
+const superaJornada = totalHoras > JORNADA_HORAS;
   const filteredIssues = issues.filter(i => i.summary.toLowerCase().includes(issueSearch.toLowerCase()) || i.key.toLowerCase().includes(issueSearch.toLowerCase()));
   const groups = groupIssues(filteredIssues);
 
@@ -407,7 +408,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="h-3 bg-gray-100 rounded-full overflow-hidden flex">
-                <div className={`h-full transition-all duration-500 ${llegaObjetivo ? "bg-green-500" : "bg-green-400"}`} style={{ width: `${Math.min((alreadyLoggedToday / JORNADA_HORAS) * 100, 100)}%` }} />
+                <div className={`h-full transition-all duration-500 ${superaJornada ? "bg-red-500" : llegaObjetivo ? "bg-green-500" : "bg-green-400"}`} style={{ width: `${Math.min((alreadyLoggedToday / JORNADA_HORAS) * 100, 100)}%` }} />
                 <div className="h-full bg-red-500 transition-all duration-500" style={{ width: `${Math.min((newHoras / JORNADA_HORAS) * 100, 100 - (alreadyLoggedToday / JORNADA_HORAS) * 100)}%` }} />
               </div>
               <div className="flex justify-between mt-1.5 flex-wrap gap-1">
@@ -415,7 +416,7 @@ export default function Dashboard() {
                   {alreadyLoggedToday > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-400" />{alreadyLoggedToday.toFixed(1)}h ya imputadas</span>}
                   {newHoras > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" />{newHoras.toFixed(1)}h nuevas</span>}
                 </div>
-                {llegaObjetivo && <p className="text-xs text-green-600 font-medium">✓ Jornada completa</p>}
+                {superaJornada ? <p className="text-xs text-red-600 font-medium">⚠ Superaste las 8h</p> : llegaObjetivo && <p className="text-xs text-green-600 font-medium">✓ Jornada completa</p>}
               </div>
             </div>
           </div>

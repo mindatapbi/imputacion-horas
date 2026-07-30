@@ -344,7 +344,7 @@ export default function TimesheetPage() {
                         <td className="px-3 py-3 text-right bg-[#0D0D0D]"><span className="text-sm font-bold text-white">{fmtTime(gt)}</span></td>
                         {days.map(d=>{
                           const s=dt[d]||0;const ic=s>=JORNADA_HORAS*3600;
-                          return <td key={d} className={`px-2 py-3 text-center bg-[#0D0D0D] ${isWE(d)?"opacity-30":""}`}>{s>0?<span className={`text-sm font-bold ${ic?"text-green-400":"text-orange-400"}`}>{fmtTime(s)}</span>:<span className="text-white/20 text-xs">—</span>}</td>;
+                          return <td key={d} className={`px-2 py-3 text-center bg-[#0D0D0D] ${isWE(d)?"opacity-30":""}`}>{s>0?<span className={`text-sm font-bold ${s>JORNADA_HORAS*3600?"text-red-400":ic?"text-green-400":"text-orange-400"}`}>{s>JORNADA_HORAS*3600?"⚠ ":""}{fmtTime(s)}</span>:<span className="text-white/20 text-xs">—</span>}</td>;
                         })}
                       </tr>
                     </tfoot>
