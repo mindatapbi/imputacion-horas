@@ -2,13 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { SessionData, sessionOptions } from "@/lib/session";
-import { getToken, refreshAccessToken } from "@/lib/redis";
-
-async function getValidToken(accountId: string, cloudId: string): Promise<string | null> {
-  const token = await getToken(accountId);
-  if (token) return token;
-  return await refreshAccessToken(accountId, cloudId);
-}
+import { getValidToken } from "@/lib/redis";
 
 export async function GET(request: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
@@ -27,7 +21,6 @@ export async function GET(request: NextRequest) {
         { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
       );
       const data = await response.json();
-      console.log("Total proyectos devueltos por Jira:", data.values?.length, "Usuario:", session.user.accountId);
       const projects = data.values?.map((p: any) => ({ key: p.key, name: p.name })) || [];
       return NextResponse.json({ projects });
     }

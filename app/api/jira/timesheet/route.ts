@@ -2,13 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { SessionData, sessionOptions } from "@/lib/session";
-import { getToken, refreshAccessToken } from "@/lib/redis";
-
-async function getValidToken(accountId: string, cloudId: string): Promise<string | null> {
-  const token = await getToken(accountId);
-  if (token) return token;
-  return await refreshAccessToken(accountId, cloudId);
-}
+import { getValidToken } from "@/lib/redis";
 
 export async function GET(request: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
@@ -45,9 +39,9 @@ export async function GET(request: NextRequest) {
         const comment = wl.comment?.content?.[0]?.content?.[0]?.text || "";
         entries.push({
           worklogId: wl.id, issueKey: issue.key, issueSummary: issue.fields.summary,
-          issueType: issue.fields.issuetype?.name || "Task", project: issue.fields.project?.name,
-          projectKey: issue.fields.project?.key, date,
-          hours: Math.floor(wl.timeSpentSeconds / 3600),
+          issueType: issue.fields.issuetype?.name || "Task",
+          project: issue.fields.project?.name, projectKey: issue.fields.project?.key,
+          date, hours: Math.floor(wl.timeSpentSeconds / 3600),
           minutes: Math.floor((wl.timeSpentSeconds % 3600) / 60),
           timeSpentSeconds: wl.timeSpentSeconds, comment,
         });
@@ -64,6 +58,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
   if (!session.user?.accountId || !session.cloudId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
   const accessToken = await getValidToken(session.user.accountId, session.cloudId);
   if (!accessToken) return NextResponse.json({ error: "Sesión expirada" }, { status: 401 });
 
@@ -94,6 +89,7 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
   if (!session.user?.accountId || !session.cloudId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
   const accessToken = await getValidToken(session.user.accountId, session.cloudId);
   if (!accessToken) return NextResponse.json({ error: "Sesión expirada" }, { status: 401 });
 

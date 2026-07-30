@@ -2,13 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { SessionData, sessionOptions } from "@/lib/session";
-import { getToken, refreshAccessToken } from "@/lib/redis";
-
-async function getValidToken(accountId: string, cloudId: string): Promise<string | null> {
-  const token = await getToken(accountId);
-  if (token) return token;
-  return await refreshAccessToken(accountId, cloudId);
-}
+import { getValidToken } from "@/lib/redis";
 
 export async function POST(request: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
