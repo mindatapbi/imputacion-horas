@@ -40,17 +40,7 @@ export default async function Home({
           <h1 style={{ fontSize: 36, fontWeight: 700, color: '#fff', lineHeight: 1.12, letterSpacing: '-0.01em', maxWidth: '14ch', margin: '0 0 28px' }}>
             Registrá tus horas <span style={{ color: '#D4AF37' }}>sin fricción.</span>
           </h1>
-          <div style={{ borderTop: '1px solid rgba(212,175,55,0.4)', paddingTop: 20 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 24px', fontSize: 12 }}>
-              <span style={{ color: 'rgba(255,255,255,0.45)' }}>Integración</span>
-              <span style={{ color: '#fff', fontWeight: 700, textAlign: 'right' }}>Jira Cloud</span>
-              <span style={{ color: 'rgba(255,255,255,0.45)' }}>Usuarios</span>
-              <span style={{ color: '#fff', fontWeight: 700, textAlign: 'right' }}>~300 empleados</span>
-              <span style={{ color: 'rgba(255,255,255,0.45)' }}>Costo mensual</span>
-              <span style={{ color: '#D4AF37', fontWeight: 700, textAlign: 'right' }}>$0 / mes</span>
-            </div>
           </div>
-        </div>
 
         <p style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)' }}>
           © {new Date().getFullYear()} Mindata · Uso interno
