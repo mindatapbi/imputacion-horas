@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     // ── BÚSQUEDA GLOBAL POR TEXTO ──────────────────────────────────────────
     if (query) {
       const jql = encodeURIComponent(
-        `assignee = currentUser() AND statusCategory != Done AND (summary ~ "${query}" OR key = "${query}") ORDER BY updated DESC`
+        `statusCategory != Done AND (summary ~ "${query}" OR key = "${query}") ORDER BY updated DESC`
       );
       const url = `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,status,project,issuetype,parent&maxResults=20`;
       const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
