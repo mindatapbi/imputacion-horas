@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
 
 interface Project { key: string; name: string; }
@@ -10,7 +9,11 @@ interface Issue {
   project: string; issueType: string;
   parentKey: string | null; parentSummary: string | null;
 }
-interface Entry { issueKey: string; summary: string; hours: number; minutes: number; comment: string; }
+interface Entry {
+  issueKey: string; summary: string;
+  hours: number; minutes: number;
+  comment: string; timeRaw?: string; timeError?: boolean;
+}
 interface Group { parentKey: string | null; parentSummary: string | null; issues: Issue[]; }
 
 const JORNADA_HORAS = 8;
@@ -33,12 +36,34 @@ const ISSUE_TYPE_STYLES: Record<string, { emoji: string; color: string }> = {
   "Bug":      { emoji: "🐛", color: "#DC2626" },
 };
 
+// ── PARSE HORAS EN FORMATO LIBRE ──────────────────────────────────────────────
+function parseHours(val: string): number | null {
+  const v = val.trim();
+  if (!v) return null;
+  if (/^\d+(\.\d+)?$/.test(v)) return parseFloat(v);
+  const hm1 = v.match(/^(\d+):(\d+)$/);
+  if (hm1) return parseInt(hm1[1]) + parseInt(hm1[2]) / 60;
+  const hm2 = v.match(/^(\d+)h(\d+)m?$/i);
+  if (hm2) return parseInt(hm2[1]) + parseInt(hm2[2]) / 60;
+  const hOnly = v.match(/^(\d+)h$/i);
+  if (hOnly) return parseInt(hOnly[1]);
+  const mOnly = v.match(/^(\d+)m$/i);
+  if (mOnly) return parseInt(mOnly[1]) / 60;
+  return null;
+}
+
+function hoursToDisplay(hours: number, minutes: number): string {
+  if (hours === 0 && minutes === 0) return "";
+  if (minutes === 0) return `${hours}h`;
+  if (hours === 0) return `${minutes}m`;
+  return `${hours}h ${minutes}m`;
+}
+
 function StatusBadge({ status }: { status: string }) {
   const c = STATUS_COLORS[status] || { bg: "#F9FAFB", text: "#374151", dot: "#9CA3AF" };
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 500, background: c.bg, color: c.text }}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.dot }} />
-      {status}
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.dot }} />{status}
     </span>
   );
 }
@@ -46,10 +71,7 @@ function StatusBadge({ status }: { status: string }) {
 function SessionExpiredBanner() {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 4, boxShadow: '0 8px 32px rgba(0,0,0,0.2)', padding: 32, maxWidth: 380, width: '100%', textAlign: 'center', borderTop: '3px solid #D4AF37' }}>
-        <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#FBEEEE', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-          <svg style={{ width: 24, height: 24, color: '#E30613' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-        </div>
+      <div style={{ background: '#fff', borderRadius: 4, padding: 32, maxWidth: 380, width: '100%', textAlign: 'center', borderTop: '3px solid #D4AF37' }}>
         <h3 style={{ fontSize: 17, fontWeight: 700, color: '#1C1C1C', margin: '0 0 8px' }}>Sesión expirada</h3>
         <p style={{ fontSize: 13, color: '#6B6B6B', margin: '0 0 20px' }}>Tu sesión venció. Necesitás volver a iniciar sesión.</p>
         <a href="/api/auth/logout" style={{ display: 'block', background: '#E30613', color: '#fff', fontWeight: 700, padding: '11px', borderRadius: 3, textDecoration: 'none', fontSize: 13 }}>Volver a ingresar</a>
@@ -61,21 +83,18 @@ function SessionExpiredBanner() {
 function OnboardingModal({ onDismiss }: { onDismiss: () => void }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 4, boxShadow: '0 8px 32px rgba(0,0,0,0.2)', padding: 32, maxWidth: 440, width: '100%', borderTop: '3px solid #D4AF37' }}>
+      <div style={{ background: '#fff', borderRadius: 4, padding: 32, maxWidth: 440, width: '100%', borderTop: '3px solid #D4AF37' }}>
         <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1C1C1C', margin: '0 0 4px' }}>¡Bienvenido a Carga de Horas!</h3>
         <p style={{ fontSize: 13, color: '#6B6B6B', margin: '0 0 20px' }}>Así funciona en 3 pasos simples:</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 24 }}>
           {[
             ["1", "Elegí el proyecto", "Buscá y seleccioná el proyecto de Jira en el panel izquierdo."],
             ["2", "Agregá los tickets", "Expandí la épica y hacé click en '+ Agregar' en cada ticket."],
-            ["3", "Imputá las horas", "Ingresá horas y minutos y confirmá con el botón de imputar."],
+            ["3", "Imputá las horas", "Ingresá las horas en formato libre (2h30, 90m, 1:30) y confirmá."],
           ].map(([num, title, desc]) => (
             <div key={num} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
               <div style={{ width: 28, height: 28, background: '#E30613', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{num}</div>
-              <div>
-                <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1C1C1C' }}>{title}</p>
-                <p style={{ margin: '2px 0 0', fontSize: 12, color: '#6B6B6B' }}>{desc}</p>
-              </div>
+              <div><p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1C1C1C' }}>{title}</p><p style={{ margin: '2px 0 0', fontSize: 12, color: '#6B6B6B' }}>{desc}</p></div>
             </div>
           ))}
         </div>
@@ -97,9 +116,9 @@ function ProjectSelector({ projects, value, onChange }: { projects: Project[]; v
   }, []);
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <button onClick={() => setOpen(!open)} style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '8px 12px', fontSize: 13, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', cursor: 'pointer', transition: 'border-color 0.12s' }}>
+      <button onClick={() => setOpen(!open)} style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '8px 12px', fontSize: 13, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', cursor: 'pointer' }}>
         {selected ? <span style={{ color: '#1C1C1C' }}>{selected.name} <span style={{ color: '#E30613', fontFamily: 'monospace', fontWeight: 700 }}>({selected.key})</span></span> : <span style={{ color: '#9CA3AF' }}>— Elegí un proyecto —</span>}
-        <svg style={{ width: 14, height: 14, color: '#9CA3AF', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.12s' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+        <span style={{ color: '#9CA3AF', fontSize: 10 }}>{open ? '▲' : '▼'}</span>
       </button>
       {open && (
         <div style={{ position: 'absolute', zIndex: 20, width: '100%', marginTop: 2, background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
@@ -108,7 +127,7 @@ function ProjectSelector({ projects, value, onChange }: { projects: Project[]; v
               style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '6px 10px', fontSize: 12, outline: 'none' }} />
           </div>
           <div style={{ maxHeight: 220, overflowY: 'auto' }}>
-            {filtered.length === 0 ? <p style={{ padding: '12px 10px', fontSize: 12, color: '#9CA3AF', textAlign: 'center', margin: 0 }}>Sin resultados</p>
+            {filtered.length === 0 ? <p style={{ padding: '12px', fontSize: 12, color: '#9CA3AF', textAlign: 'center', margin: 0 }}>Sin resultados</p>
               : filtered.map(p => (
                 <button key={p.key} onClick={() => { onChange(p.key); setOpen(false); setSearch(""); }}
                   style={{ width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 12, background: value === p.key ? '#FBEEEE' : 'transparent', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -129,10 +148,8 @@ function EpicGroup({ group, entries, onAdd, onStartTimer }: { group: Group; entr
   const addedCount = group.issues.filter(i => entries.some(e => e.issueKey === i.key)).length;
   return (
     <div style={{ marginBottom: 8 }}>
-      <button onClick={() => setCollapsed(!collapsed)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 3, background: isEpic ? '#FBEEEE' : '#F9FAFB', border: '1px solid', borderColor: isEpic ? 'rgba(212,175,55,0.3)' : '#DCDEE0', cursor: 'pointer', textAlign: 'left' }}>
-        <svg style={{ width: 12, height: 12, color: '#9CA3AF', transform: collapsed ? '-rotate(90deg)' : 'none', flexShrink: 0, transition: 'transform 0.12s', ...(collapsed ? { transform: 'rotate(-90deg)' } : {}) }} fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-        </svg>
+      <button onClick={() => setCollapsed(!collapsed)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 3, background: isEpic ? '#FBEEEE' : '#F9FAFB', border: `1px solid ${isEpic ? 'rgba(212,175,55,0.3)' : '#DCDEE0'}`, cursor: 'pointer', textAlign: 'left' }}>
+        <span style={{ fontSize: 10, color: '#9CA3AF', transform: collapsed ? 'rotate(-90deg)' : 'none', display: 'inline-block', transition: 'transform 0.12s' }}>▼</span>
         {isEpic ? (<><span style={{ fontSize: 13 }}>⚡</span><span style={{ fontSize: 12, fontWeight: 700, color: '#1C1C1C', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.parentSummary}</span><span style={{ fontSize: 11, color: '#E30613', fontFamily: 'monospace', fontWeight: 700, flexShrink: 0 }}>{group.parentKey}</span></>)
           : <span style={{ fontSize: 12, fontWeight: 700, color: '#9CA3AF', flex: 1 }}>Sin épica</span>}
         <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 99, background: addedCount > 0 ? '#FBEEEE' : '#F3F4F6', color: addedCount > 0 ? '#E30613' : '#6B6B6B', flexShrink: 0 }}>
@@ -143,9 +160,8 @@ function EpicGroup({ group, entries, onAdd, onStartTimer }: { group: Group; entr
         <div style={{ marginLeft: 12, marginTop: 4, paddingLeft: 12, borderLeft: `2px solid ${isEpic ? 'rgba(212,175,55,0.4)' : '#DCDEE0'}` }}>
           {group.issues.map(issue => {
             const added = entries.some(e => e.issueKey === issue.key);
-            const ts = ISSUE_TYPE_STYLES[issue.issueType] || { emoji: "📄", color: "#9CA3AF" };
             return (
-              <div key={issue.key} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '8px 10px', marginBottom: 4, borderRadius: 3, border: '1px solid', borderColor: added ? 'rgba(212,175,55,0.4)' : '#DCDEE0', background: added ? '#FFFDF0' : '#fff', gap: 8 }}>
+              <div key={issue.key} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '8px 10px', marginBottom: 4, borderRadius: 3, border: `1px solid ${added ? 'rgba(212,175,55,0.4)' : '#DCDEE0'}`, background: added ? '#FFFDF0' : '#fff', gap: 8 }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#1C1C1C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.summary}</p>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
@@ -182,11 +198,7 @@ function CalendarView({ onTodayHours }: { onTodayHours: (h: number) => void }) {
   const fetchCalendar = async () => {
     setLoading(true);
     const res = await fetch(`/api/jira/calendar?year=${year}&month=${month}`);
-    if (res.ok) {
-      const data = await res.json();
-      setDailyHours(data.dailyHours || {});
-      if (year === now.getFullYear() && month === now.getMonth() + 1) onTodayHours(data.dailyHours?.[today] || 0);
-    }
+    if (res.ok) { const data = await res.json(); setDailyHours(data.dailyHours || {}); if (year === now.getFullYear() && month === now.getMonth() + 1) onTodayHours(data.dailyHours?.[today] || 0); }
     setLoading(false);
   };
   const prevMonth = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
@@ -219,9 +231,9 @@ function CalendarView({ onTodayHours }: { onTodayHours: (h: number) => void }) {
           <p style={{ fontSize: 11, color: '#6B6B6B', margin: '3px 0 0' }}>{loading ? 'Cargando...' : `${workedDays} días imputados · ${totalHours.toFixed(1)}h totales`}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={prevMonth} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#F9FAFB', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>◀</button>
+          <button onClick={prevMonth} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#F9FAFB', cursor: 'pointer', fontSize: 12 }}>◀</button>
           <span style={{ fontSize: 13, fontWeight: 700, color: '#1C1C1C', minWidth: 120, textAlign: 'center' }}>{MONTHS[month - 1]} {year}</span>
-          <button onClick={nextMonth} disabled={year === now.getFullYear() && month === now.getMonth() + 1} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#F9FAFB', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, opacity: (year === now.getFullYear() && month === now.getMonth() + 1) ? 0.4 : 1 }}>▶</button>
+          <button onClick={nextMonth} disabled={year === now.getFullYear() && month === now.getMonth() + 1} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#F9FAFB', cursor: 'pointer', fontSize: 12, opacity: (year === now.getFullYear() && month === now.getMonth() + 1) ? 0.4 : 1 }}>▶</button>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
@@ -241,12 +253,7 @@ function CalendarView({ onTodayHours }: { onTodayHours: (h: number) => void }) {
           return (
             <div key={dateStr} style={{ background: bg, borderRadius: 3, padding: '4px 5px', minHeight: 52, display: 'flex', flexDirection: 'column', outline: isToday ? '2px solid #E30613' : 'none', outlineOffset: -2 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: isToday ? '#E30613' : numColor }}>{day}</span>
-              {bar && (
-                <div style={{ marginTop: 'auto' }}>
-                  <div style={{ height: 4, borderRadius: 99, background: bar, marginTop: 4, width: `${Math.min((dailyHours[dateStr] || 0) / JORNADA_HORAS * 100, 100)}%` }} />
-                  <span style={{ fontSize: 9, color: '#6B6B6B', marginTop: 2, display: 'block' }}>{label}</span>
-                </div>
-              )}
+              {bar && (<div style={{ marginTop: 'auto' }}><div style={{ height: 4, borderRadius: 99, background: bar, marginTop: 4, width: `${Math.min((dailyHours[dateStr] || 0) / JORNADA_HORAS * 100, 100)}%` }} /><span style={{ fontSize: 9, color: '#6B6B6B', marginTop: 2, display: 'block' }}>{label}</span></div>)}
             </div>
           );
         })}
@@ -262,14 +269,12 @@ function groupIssues(issues: Issue[]): Group[] {
     if (!groups[key]) groups[key] = { parentKey: issue.parentKey, parentSummary: issue.parentSummary, issues: [] };
     groups[key].issues.push(issue);
   }
-  return Object.values(groups).sort((a, b) => {
-    if (a.parentKey === null) return 1; if (b.parentKey === null) return -1;
-    return (a.parentKey || "").localeCompare(b.parentKey || "");
-  });
+  return Object.values(groups).sort((a, b) => { if (a.parentKey === null) return 1; if (b.parentKey === null) return -1; return (a.parentKey || "").localeCompare(b.parentKey || ""); });
 }
 
 function validateEntries(entries: Entry[]): string | null {
   for (const e of entries) {
+    if (e.timeError) return `${e.issueKey}: formato no válido. Usá 2, 2:30, 2h30 o 90m.`;
     if (e.hours === 0 && e.minutes === 0) return `${e.issueKey}: el tiempo no puede ser 0. Poné al menos 1 minuto.`;
     if (e.hours > 24) return `${e.issueKey}: no podés imputar más de 24h en un día.`;
     if (e.minutes > 59) return `${e.issueKey}: los minutos deben ser entre 0 y 59.`;
@@ -316,19 +321,39 @@ export default function Dashboard() {
     if (res.status === 401) { setSessionExpired(true); return; }
     const data = await res.json(); setIssues(data.issues || []); setLoadingIssues(false);
   };
-  const addEntry = (issue: Issue) => { if (entries.find(e => e.issueKey === issue.key)) return; setEntries([...entries, { issueKey: issue.key, summary: issue.summary, hours: 0, minutes: 0, comment: "" }]); setError(""); };
-  const updateEntry = (issueKey: string, field: keyof Entry, value: string | number) => { setEntries(entries.map(e => e.issueKey === issueKey ? { ...e, [field]: value } : e)); setError(""); };
+
+  const addEntry = (issue: Issue) => {
+    if (entries.find(e => e.issueKey === issue.key)) return;
+    setEntries([...entries, { issueKey: issue.key, summary: issue.summary, hours: 0, minutes: 0, comment: "", timeRaw: "", timeError: false }]);
+    setError("");
+  };
+
+  const updateEntry = (issueKey: string, field: keyof Entry, value: string | number | boolean) => {
+    setEntries(entries.map(e => e.issueKey === issueKey ? { ...e, [field]: value } : e));
+    setError("");
+  };
+
+  const updateEntryTime = (issueKey: string, raw: string) => {
+    const parsed = parseHours(raw);
+    const hours = parsed !== null ? Math.floor(parsed) : 0;
+    const minutes = parsed !== null ? Math.round((parsed - hours) * 60) : 0;
+    setEntries(entries.map(e => e.issueKey === issueKey ? { ...e, timeRaw: raw, hours, minutes, timeError: raw !== "" && (parsed === null || parsed <= 0) } : e));
+    setError("");
+  };
+
   const removeEntry = (issueKey: string) => setEntries(entries.filter(e => e.issueKey !== issueKey));
 
   const handleTimerStop = (seconds: number, ticketKey: string, ticketSummary: string) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
+    const display = hoursToDisplay(hours, minutes);
     const existing = entries.find(e => e.issueKey === ticketKey);
     if (existing) {
-      updateEntry(ticketKey, "hours", existing.hours + hours);
-      updateEntry(ticketKey, "minutes", existing.minutes + minutes);
+      const newH = existing.hours + hours;
+      const newM = existing.minutes + minutes;
+      setEntries(prev => prev.map(e => e.issueKey === ticketKey ? { ...e, hours: newH, minutes: newM, timeRaw: hoursToDisplay(newH, newM), timeError: false } : e));
     } else {
-      setEntries(prev => [...prev, { issueKey: ticketKey, summary: ticketSummary, hours, minutes, comment: "" }]);
+      setEntries(prev => [...prev, { issueKey: ticketKey, summary: ticketSummary, hours, minutes, comment: "", timeRaw: display, timeError: false }]);
     }
     setActiveTimerTicket(null);
   };
@@ -337,7 +362,6 @@ export default function Dashboard() {
 
   const newHoras = entries.reduce((acc, e) => acc + e.hours + e.minutes / 60, 0);
   const totalHoras = alreadyLoggedToday + newHoras;
-  const porcentaje = Math.min((totalHoras / JORNADA_HORAS) * 100, 100);
   const llegaObjetivo = totalHoras >= JORNADA_HORAS;
   const superaJornada = totalHoras > JORNADA_HORAS;
   const filteredIssues = issues.filter(i => i.summary.toLowerCase().includes(issueSearch.toLowerCase()) || i.key.toLowerCase().includes(issueSearch.toLowerCase()));
@@ -385,11 +409,11 @@ export default function Dashboard() {
 
       <AppHeader user={user} activeTab="dashboard" onTimerStop={handleTimerStop} activeTimerTicket={activeTimerTicket} />
 
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '22px 22px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '22px' }}>
         {error && (
-          <div style={{ background: '#FBEEEE', borderLeft: '3px solid #E30613', padding: '10px 14px', fontSize: 12, marginBottom: 16, color: '#8E0000', borderRadius: 3 }}>
-            {error}
-            <button onClick={() => setError("")} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#8E0000', fontSize: 14 }}>✕</button>
+          <div style={{ background: '#FBEEEE', borderLeft: '3px solid #E30613', padding: '10px 14px', fontSize: 12, marginBottom: 16, color: '#8E0000', borderRadius: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{error}</span>
+            <button onClick={() => setError("")} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8E0000', fontSize: 14 }}>✕</button>
           </div>
         )}
 
@@ -430,18 +454,17 @@ export default function Dashboard() {
             </div>
             <div style={{ marginBottom: 12 }}>
               <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6B6B6B', margin: '0 0 6px' }}>Proyecto</p>
-              {loadingProjects ? <div style={{ fontSize: 12, color: '#6B6B6B', display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ width: 14, height: 14, border: '2px solid #DCDEE0', borderTop: '2px solid #E30613', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />Cargando...</div>
+              {loadingProjects ? <div style={{ fontSize: 12, color: '#6B6B6B' }}>Cargando...</div>
                 : <ProjectSelector projects={projects} value={selectedProject} onChange={setSelectedProject} />}
             </div>
             {selectedProject && (
               <div style={{ marginBottom: 12, position: 'relative' }}>
-                <svg style={{ width: 14, height: 14, color: '#9CA3AF', position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                 <input type="text" placeholder="Filtrar tickets..." value={issueSearch} onChange={e => setIssueSearch(e.target.value)}
-                  style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '7px 10px 7px 30px', fontSize: 12, outline: 'none' }} />
+                  style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '7px 10px', fontSize: 12, outline: 'none' }} />
               </div>
             )}
             <div style={{ maxHeight: 420, overflowY: 'auto' }}>
-              {loadingIssues ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '32px 0', fontSize: 13, color: '#6B6B6B' }}><div style={{ width: 16, height: 16, border: '2px solid #DCDEE0', borderTop: '2px solid #E30613', borderRadius: '50%' }} />Cargando tickets...</div>
+              {loadingIssues ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '32px 0', fontSize: 13, color: '#6B6B6B' }}>Cargando tickets...</div>
                 : !selectedProject ? <div style={{ textAlign: 'center', padding: '32px 0' }}><div style={{ fontSize: 28, marginBottom: 8 }}>📁</div><p style={{ fontSize: 13, color: '#9CA3AF', margin: 0 }}>Elegí un proyecto para ver sus tickets</p></div>
                 : filteredIssues.length === 0 ? <p style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: '#9CA3AF' }}>No se encontraron tickets activos</p>
                 : groups.map(group => <EpicGroup key={group.parentKey || "__none__"} group={group} entries={entries} onAdd={addEntry} onStartTimer={handleStartTimer} />)}
@@ -463,25 +486,26 @@ export default function Dashboard() {
             ) : (
               <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {entries.map(entry => {
-                  const hasError = entry.hours === 0 && entry.minutes === 0;
+                  const hasError = entry.timeError || (entry.hours === 0 && entry.minutes === 0 && (entry.timeRaw === undefined || entry.timeRaw === ""));
                   return (
                     <div key={entry.issueKey} style={{ padding: 12, borderRadius: 3, border: `1px solid ${hasError ? '#E30613' : 'rgba(212,175,55,0.3)'}`, background: hasError ? '#FBEEEE' : '#FFFDF0' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                         <div style={{ minWidth: 0 }}>
                           <p style={{ fontSize: 13, fontWeight: 700, color: '#1C1C1C', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>{entry.summary}</p>
                           <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#E30613' }}>{entry.issueKey}</span>
-                          {hasError && <p style={{ fontSize: 11, color: '#E30613', margin: '2px 0 0' }}>⚠ Poné al menos 1 minuto</p>}
+                          {entry.timeError && <p style={{ fontSize: 11, color: '#E30613', margin: '2px 0 0' }}>⚠ Formato no válido. Usá: 2h30, 90m, 1:30</p>}
                         </div>
                         <button onClick={() => removeEntry(entry.issueKey)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 16, padding: '0 0 0 8px' }}>✕</button>
                       </div>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', background: '#fff' }}>
-                          <input type="number" min={0} max={24} value={entry.hours} onChange={e => updateEntry(entry.issueKey, "hours", parseInt(e.target.value) || 0)} style={{ width: 36, textAlign: 'center', fontSize: 14, fontWeight: 700, border: 'none', outline: 'none', background: 'transparent' }} />
-                          <span style={{ fontSize: 11, color: '#9CA3AF' }}>h</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', background: '#fff' }}>
-                          <input type="number" min={0} max={59} step={15} value={entry.minutes} onChange={e => updateEntry(entry.issueKey, "minutes", parseInt(e.target.value) || 0)} style={{ width: 36, textAlign: 'center', fontSize: 14, fontWeight: 700, border: 'none', outline: 'none', background: 'transparent' }} />
-                          <span style={{ fontSize: 11, color: '#9CA3AF' }}>min</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, border: `1px solid ${entry.timeError ? '#E30613' : '#DCDEE0'}`, borderRadius: 3, padding: '5px 8px', background: '#fff', minWidth: 110 }}>
+                          <input
+                            type="text"
+                            value={entry.timeRaw ?? hoursToDisplay(entry.hours, entry.minutes)}
+                            onChange={e => updateEntryTime(entry.issueKey, e.target.value)}
+                            placeholder="2h30, 90m, 1:30"
+                            style={{ width: '100%', fontSize: 13, fontWeight: 700, border: 'none', outline: 'none', background: 'transparent', color: entry.timeError ? '#E30613' : '#1C1C1C' }}
+                          />
                         </div>
                         <input type="text" placeholder="Comentario (opcional)" value={entry.comment} onChange={e => updateEntry(entry.issueKey, "comment", e.target.value)}
                           style={{ flex: 1, border: '1px solid #DCDEE0', borderRadius: 3, padding: '6px 10px', fontSize: 12, outline: 'none', background: '#fff' }} />
@@ -492,8 +516,8 @@ export default function Dashboard() {
               </div>
             )}
             {entries.length > 0 && (
-              <button onClick={handleSubmit} disabled={submitting || newHoras === 0}
-                style={{ marginTop: 14, width: '100%', background: newHoras === 0 ? '#ECF0F1' : '#E30613', color: newHoras === 0 ? '#9CA3AF' : '#fff', border: 'none', borderRadius: 3, padding: '12px', fontSize: 14, fontWeight: 700, cursor: newHoras === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <button onClick={handleSubmit} disabled={submitting || newHoras === 0 || entries.some(e => e.timeError)}
+                style={{ marginTop: 14, width: '100%', background: (newHoras === 0 || entries.some(e => e.timeError)) ? '#ECF0F1' : '#E30613', color: (newHoras === 0 || entries.some(e => e.timeError)) ? '#9CA3AF' : '#fff', border: 'none', borderRadius: 3, padding: '12px', fontSize: 14, fontWeight: 700, cursor: (newHoras === 0 || entries.some(e => e.timeError)) ? 'not-allowed' : 'pointer' }}>
                 {submitting ? 'Imputando...' : `Imputar ${newHoras.toFixed(1)}h en Jira →`}
               </button>
             )}
@@ -502,7 +526,6 @@ export default function Dashboard() {
 
         <CalendarView onTodayHours={setAlreadyLoggedToday} />
       </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </main>
   );
 }

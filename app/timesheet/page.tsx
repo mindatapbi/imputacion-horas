@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import Link from "next/link";
 import * as XLSX from "xlsx";
 import AppHeader from "@/components/AppHeader";
 
@@ -25,14 +24,32 @@ const ISSUE_TYPE_STYLES: Record<string, { emoji: string; color: string }> = {
   "Task": { emoji: "✅", color: "#2563EB" }, "Sub-task": { emoji: "↳", color: "#9CA3AF" }, "Bug": { emoji: "🐛", color: "#DC2626" },
 };
 
+// ── PARSE HORAS EN FORMATO LIBRE ──────────────────────────────────────────────
+function parseHours(val: string): number | null {
+  const v = val.trim();
+  if (!v) return null;
+  if (/^\d+(\.\d+)?$/.test(v)) return parseFloat(v);
+  const hm1 = v.match(/^(\d+):(\d+)$/);
+  if (hm1) return parseInt(hm1[1]) + parseInt(hm1[2]) / 60;
+  const hm2 = v.match(/^(\d+)h(\d+)m?$/i);
+  if (hm2) return parseInt(hm2[1]) + parseInt(hm2[2]) / 60;
+  const hOnly = v.match(/^(\d+)h$/i);
+  if (hOnly) return parseInt(hOnly[1]);
+  const mOnly = v.match(/^(\d+)m$/i);
+  if (mOnly) return parseInt(mOnly[1]) / 60;
+  return null;
+}
+
 function fmtTime(s: number) { if (!s) return ""; const h = Math.floor(s/3600), m = Math.floor((s%3600)/60); return m ? (h ? `${h}h ${m}m` : `${m}m`) : `${h}h`; }
 function fmtDate(d: string) { return new Date(d+"T12:00:00").toLocaleDateString("es-AR",{weekday:"short",day:"numeric",month:"short"}); }
 function getDays(from: string, to: string) { const days: string[]=[]; const c=new Date(from+"T12:00:00"), e=new Date(to+"T12:00:00"); while(c<=e){days.push(c.toISOString().split("T")[0]);c.setDate(c.getDate()+1);} return days; }
+
 function groupIssuesForPanel(issues: Issue[]): IssueGroup[] {
   const g: Record<string,IssueGroup>={};
   for(const i of issues){const k=i.parentKey||"__none__";if(!g[k])g[k]={parentKey:i.parentKey,parentSummary:i.parentSummary,issues:[]};g[k].issues.push(i);}
   return Object.values(g).sort((a,b)=>a.parentKey===null?1:b.parentKey===null?-1:(a.parentKey||"").localeCompare(b.parentKey||""));
 }
+
 function buildEpicGroups(entries: Entry[]): EpicGroup[] {
   const epicMap: Record<string, EpicGroup> = {};
   for (const entry of entries) {
@@ -95,15 +112,29 @@ function EntryModal({ title, issueKey, issueSummary, date, initialHours=0, initi
   initialHours?: number; initialMinutes?: number; initialComment?: string; worklogId?: string;
   onSave: (e: Entry) => void; onClose: () => void;
 }) {
-  const [hours, setHours] = useState(initialHours);
-  const [minutes, setMinutes] = useState(initialMinutes);
+  const [timeRaw, setTimeRaw] = useState(() => {
+    if (initialHours === 0 && initialMinutes === 0) return "";
+    if (initialMinutes === 0) return `${initialHours}h`;
+    if (initialHours === 0) return `${initialMinutes}m`;
+    return `${initialHours}h ${initialMinutes}m`;
+  });
+  const [timeError, setTimeError] = useState(false);
   const [comment, setComment] = useState(initialComment);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const handleTimeChange = (val: string) => {
+    setTimeRaw(val);
+    const parsed = parseHours(val);
+    setTimeError(val !== "" && (parsed === null || parsed <= 0));
+  };
+
   const handleSave = async () => {
-    if (hours===0&&minutes===0){setError("Poné al menos 1 minuto.");return;}
-    setSaving(true);setError("");
+    const parsed = parseHours(timeRaw);
+    if (!parsed || parsed <= 0) { setError("Formato no válido. Usá: 2h30, 90m, 1:30, 2.5"); return; }
+    const hours = Math.floor(parsed);
+    const minutes = Math.round((parsed - hours) * 60);
+    setSaving(true); setError("");
     if (worklogId) {
       const res = await fetch("/api/jira/timesheet",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({issueKey,worklogId,hours,minutes,comment,date})});
       if(res.ok)onSave({worklogId,issueKey,issueSummary,issueType:"Task",project:"",projectKey:"",parentKey:null,parentSummary:null,date,hours,minutes,timeSpentSeconds:hours*3600+minutes*60,comment});
@@ -125,20 +156,26 @@ function EntryModal({ title, issueKey, issueSummary, date, initialHours=0, initi
           <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:'#9CA3AF',fontSize:18,padding:'0 0 0 12px'}}>✕</button>
         </div>
         <div style={{marginBottom:14}}>
-          <p style={{fontSize:10,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:'#6B6B6B',margin:'0 0 8px'}}>Tiempo</p>
-          <div style={{display:'flex',gap:10,alignItems:'center'}}>
-            <div style={{display:'flex',alignItems:'center',gap:4,border:'1px solid #DCDEE0',borderRadius:3,padding:'8px 12px',background:'#F9FAFB'}}><input autoFocus type="number" min={0} max={24} value={hours} onChange={e=>setHours(parseInt(e.target.value)||0)} style={{width:40,textAlign:'center',fontSize:16,fontWeight:700,border:'none',outline:'none',background:'transparent'}}/><span style={{fontSize:12,color:'#9CA3AF'}}>h</span></div>
-            <div style={{display:'flex',alignItems:'center',gap:4,border:'1px solid #DCDEE0',borderRadius:3,padding:'8px 12px',background:'#F9FAFB'}}><input type="number" min={0} max={59} step={15} value={minutes} onChange={e=>setMinutes(parseInt(e.target.value)||0)} style={{width:40,textAlign:'center',fontSize:16,fontWeight:700,border:'none',outline:'none',background:'transparent'}}/><span style={{fontSize:12,color:'#9CA3AF'}}>min</span></div>
-          </div>
+          <p style={{fontSize:10,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:'#6B6B6B',margin:'0 0 6px'}}>Tiempo</p>
+          <input
+            autoFocus
+            type="text"
+            value={timeRaw}
+            onChange={e => handleTimeChange(e.target.value)}
+            placeholder="Ej: 2h30, 90m, 1:30, 2.5"
+            style={{width:'100%',border:`1px solid ${timeError?'#E30613':'#DCDEE0'}`,borderRadius:3,padding:'10px 12px',fontSize:15,fontWeight:700,outline:'none',color:timeError?'#E30613':'#1C1C1C',background:timeError?'#FBEEEE':'#F9FAFB'}}
+          />
+          {timeError && <p style={{fontSize:11,color:'#E30613',margin:'4px 0 0'}}>Formato no válido. Usá: 2h30, 90m, 1:30 o 2.5</p>}
+          <p style={{fontSize:10,color:'#9CA3AF',margin:'4px 0 0'}}>Aceptamos: 2 · 2.5 · 2:30 · 2h30 · 2h30m · 90m</p>
         </div>
         <div style={{marginBottom:14}}>
-          <p style={{fontSize:10,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:'#6B6B6B',margin:'0 0 8px'}}>Comentario</p>
+          <p style={{fontSize:10,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:'#6B6B6B',margin:'0 0 6px'}}>Comentario</p>
           <textarea value={comment} onChange={e=>setComment(e.target.value)} rows={3} style={{width:'100%',border:'1px solid #DCDEE0',borderRadius:3,padding:'8px 10px',fontSize:12,outline:'none',resize:'none'}} placeholder="Comentario (opcional)"/>
         </div>
         {error&&<p style={{fontSize:12,color:'#E30613',margin:'0 0 12px'}}>{error}</p>}
         <div style={{display:'flex',gap:10}}>
           <button onClick={onClose} style={{flex:1,border:'1px solid #DCDEE0',borderRadius:3,padding:'10px',fontSize:13,fontWeight:700,background:'#fff',cursor:'pointer',color:'#333'}}>Cancelar</button>
-          <button onClick={handleSave} disabled={saving} style={{flex:1,background:'#E30613',color:'#fff',border:'none',borderRadius:3,padding:'10px',fontSize:13,fontWeight:700,cursor:'pointer',opacity:saving?0.7:1}}>{saving?'Guardando...':worklogId?'Guardar cambios':'Registrar horas'}</button>
+          <button onClick={handleSave} disabled={saving||timeError} style={{flex:1,background:'#E30613',color:'#fff',border:'none',borderRadius:3,padding:'10px',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(saving||timeError)?0.7:1}}>{saving?'Guardando...':worklogId?'Guardar cambios':'Registrar horas'}</button>
         </div>
       </div>
     </div>
@@ -208,17 +245,14 @@ export default function TimesheetPage() {
   const filteredIssues=issues.filter(i=>i.summary.toLowerCase().includes(issueSearch.toLowerCase())||i.key.toLowerCase().includes(issueSearch.toLowerCase()));
   const panelGroups=groupIssuesForPanel(filteredIssues);
 
-  const sidebarStyle: React.CSSProperties = { width: 280, flexShrink: 0, background: '#fff', borderRight: '1px solid #DCDEE0', display: 'flex', flexDirection: 'column', overflow: 'hidden' };
-  const sectionHeadStyle: React.CSSProperties = { padding: '10px 12px', borderBottom: '1px solid rgba(212,175,55,0.3)', background: '#FAFAFA' };
-
   return (
     <main style={{minHeight:'100vh',background:'#ECF0F1',fontFamily:'Arial, sans-serif'}}>
       <AppHeader user={user} activeTab="timesheet" />
 
       <div style={{display:'flex',height:'calc(100vh - 57px)'}}>
         {/* PANEL IZQUIERDO */}
-        <div style={sidebarStyle}>
-          <div style={sectionHeadStyle}>
+        <div style={{width:280,flexShrink:0,background:'#fff',borderRight:'1px solid #DCDEE0',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+          <div style={{padding:'10px 12px',borderBottom:'1px solid rgba(212,175,55,0.3)',background:'#FAFAFA'}}>
             <h2 style={{fontSize:13,fontWeight:700,color:'#1C1C1C',margin:0}}>Agregar horas</h2>
             <p style={{fontSize:11,color:'#6B6B6B',margin:'2px 0 0'}}>Elegí proyecto, ticket y fecha</p>
           </div>
@@ -243,8 +277,7 @@ export default function TimesheetPage() {
 
         {/* PANEL DERECHO */}
         <div style={{flex:1,overflow:'auto',padding:16}}>
-          {/* Controles */}
-          <div style={{background:'#fff',border:'1px solid #DCDEE0',borderRadius:3,boxShadow:'0 1px 0 rgba(28,28,28,0.04)',padding:'10px 14px',display:'flex',flexWrap:'wrap',alignItems:'center',gap:10,justifyContent:'space-between',marginBottom:14}}>
+          <div style={{background:'#fff',border:'1px solid #DCDEE0',borderRadius:3,padding:'10px 14px',display:'flex',flexWrap:'wrap',alignItems:'center',gap:10,justifyContent:'space-between',marginBottom:14,boxShadow:'0 1px 0 rgba(28,28,28,0.04)'}}>
             <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
               <button onClick={()=>shiftWeek(-1)} style={{width:28,height:28,border:'1px solid #DCDEE0',borderRadius:3,background:'#F9FAFB',cursor:'pointer',fontSize:12}}>◀</button>
               <div style={{display:'flex',alignItems:'center',gap:6}}>
@@ -266,10 +299,9 @@ export default function TimesheetPage() {
 
           {error&&<div style={{background:'#FBEEEE',borderLeft:'3px solid #E30613',padding:'8px 12px',fontSize:12,marginBottom:12,color:'#8E0000',borderRadius:3}}>{error}</div>}
 
-          {/* Tabla */}
           {loading?(
             <div style={{background:'#fff',border:'1px solid #DCDEE0',borderRadius:3,padding:40,display:'flex',alignItems:'center',justifyContent:'center',gap:10,color:'#6B6B6B',fontSize:13}}>
-              <div style={{width:18,height:18,border:'2px solid #DCDEE0',borderTop:'2px solid #E30613',borderRadius:'50%'}}/>Cargando registros...
+              Cargando registros...
             </div>
           ):(
             <div style={{background:'#fff',border:'1px solid #DCDEE0',borderRadius:3,overflow:'hidden'}}>
@@ -321,7 +353,7 @@ export default function TimesheetPage() {
                                 {days.map(d=>{
                                   const de=row.byDate[d]||[];const ds=de.reduce((a,e)=>a+e.timeSpentSeconds,0);const we=isWE(d);
                                   return (
-                                    <td key={d} style={{textAlign:'center',padding:'6px 4px',background:we?'#F5F5F5':d===today?'#FFF9F0':'',position:'relative'}} className="group">
+                                    <td key={d} style={{textAlign:'center',padding:'6px 4px',background:we?'#F5F5F5':d===today?'#FFF9F0':''}}>
                                       {de.length>0?(
                                         <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
                                           <span style={{fontSize:12,fontWeight:700,color:'#1C1C1C'}}>{fmtTime(ds)}</span>
@@ -351,10 +383,7 @@ export default function TimesheetPage() {
                     <tr style={{background:'#1C1C1C',borderTop:'2px solid rgba(212,175,55,0.4)'}}>
                       <td style={{padding:'8px 12px',position:'sticky',left:0,background:'#1C1C1C',zIndex:5,borderRight:'1px solid rgba(212,175,55,0.3)'}}><span style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.6)',textTransform:'uppercase',letterSpacing:'0.1em'}}>Total</span></td>
                       <td style={{textAlign:'right',padding:'8px 10px'}}><span style={{fontSize:12,fontWeight:700,color:'#fff'}}>{fmtTime(gt)}</span></td>
-                      {days.map(d=>{
-                        const s=dt[d]||0;const ic=s>=JORNADA_HORAS*3600;const over=s>JORNADA_HORAS*3600;
-                        return <td key={d} style={{textAlign:'center',padding:'8px 4px',background:'#1C1C1C',opacity:isWE(d)?0.3:1}}>{s>0?<span style={{fontSize:11,fontWeight:700,color:over?'#EF4444':ic?'#10B981':'#F59E0B'}}>{over?'⚠ ':''}{fmtTime(s)}</span>:<span style={{color:'rgba(255,255,255,0.2)',fontSize:10}}>—</span>}</td>;
-                      })}
+                      {days.map(d=>{const s=dt[d]||0;const ic=s>=JORNADA_HORAS*3600;const over=s>JORNADA_HORAS*3600;return <td key={d} style={{textAlign:'center',padding:'8px 4px',background:'#1C1C1C',opacity:isWE(d)?0.3:1}}>{s>0?<span style={{fontSize:11,fontWeight:700,color:over?'#EF4444':ic?'#10B981':'#F59E0B'}}>{over?'⚠ ':''}{fmtTime(s)}</span>:<span style={{color:'rgba(255,255,255,0.2)',fontSize:10}}>—</span>}</td>;})}
                     </tr>
                   </tfoot>
                 </table>
@@ -372,7 +401,6 @@ export default function TimesheetPage() {
 
       {editingEntry&&<EntryModal title="Editar registro" issueKey={editingEntry.issueKey} issueSummary={editingEntry.issueSummary} date={editingEntry.date} initialHours={editingEntry.hours} initialMinutes={editingEntry.minutes} initialComment={editingEntry.comment} worklogId={editingEntry.worklogId} onSave={handleSaveEdit} onClose={()=>setEditingEntry(null)}/>}
       {newEntry&&<EntryModal title="Nuevo registro" issueKey={newEntry.issueKey} issueSummary={newEntry.issueSummary} date={newEntry.date} onSave={handleSaveNew} onClose={()=>setNewEntry(null)}/>}
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </main>
   );
 }
