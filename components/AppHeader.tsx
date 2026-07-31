@@ -93,7 +93,7 @@ export default function AppHeader({ user, activeTab, onTimerStop, activeTimerTic
           cursor: 'pointer', textDecoration: 'none', display: 'inline-block',
           transition: 'color 0.12s',
         }}>
-          REGISTRO
+          Registro
         </Link>
         <Link href="/timesheet" style={{
           background: 'none', border: 0,
@@ -103,7 +103,7 @@ export default function AppHeader({ user, activeTab, onTimerStop, activeTimerTic
           cursor: 'pointer', textDecoration: 'none', display: 'inline-block',
           transition: 'color 0.12s',
         }}>
-          Timesheet
+          Consultar
         </Link>
       </nav>
 
