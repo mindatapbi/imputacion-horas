@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
           issueType: issue.fields.issuetype?.name || "Task",
           project: issue.fields.project?.name,
           projectKey: issue.fields.project?.key,
+          status: issue.fields.status?.name || "",
           parentKey: issue.fields.parent?.key || null,
           parentSummary: issue.fields.parent?.fields?.summary || null,
           date,
