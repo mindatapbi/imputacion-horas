@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef } from "react";
 import AppHeader from "@/components/AppHeader";
 
 interface Issue {
@@ -9,10 +9,17 @@ interface Issue {
   parentKey: string | null; parentSummary: string | null;
 }
 
+interface WorklogCell {
+  worklogId: string | null; // null = nuevo
+  seconds: number;
+  raw: string;
+  comment: string;
+  dirty: boolean; // cambió desde lo que está en Jira
+}
+
 interface RowEntry {
   issue: Issue;
-  byDay: Record<string, string>; // date -> raw input value
-  byDaySeconds: Record<string, number>; // date -> parsed seconds
+  cells: Record<string, WorklogCell>; // date -> cell
 }
 
 const ISSUE_TYPE_STYLES: Record<string, { emoji: string; color: string }> = {
@@ -29,15 +36,14 @@ const STATUS_COLORS: Record<string, string> = {
   "Done": "#10B981", "Closed": "#10B981", "Blocked": "#EF4444",
 };
 
-// ── PARSE HORAS ───────────────────────────────────────────────────────────────
-function parseHours(val: string): number {
+function parseToSeconds(val: string): number {
   const v = val.trim();
-  if (!v || v === "0:00" || v === "0") return 0;
-  if (/^\d+(\.\d+)?$/.test(v)) return parseFloat(v) * 3600;
+  if (!v) return 0;
+  if (/^\d+(\.\d+)?$/.test(v)) return Math.round(parseFloat(v) * 3600);
   const hm1 = v.match(/^(\d+):(\d+)$/);
-  if (hm1) return (parseInt(hm1[1]) + parseInt(hm1[2]) / 60) * 3600;
+  if (hm1) return (parseInt(hm1[1]) * 60 + parseInt(hm1[2])) * 60;
   const hm2 = v.match(/^(\d+)h(\d+)m?$/i);
-  if (hm2) return (parseInt(hm2[1]) + parseInt(hm2[2]) / 60) * 3600;
+  if (hm2) return (parseInt(hm2[1]) * 60 + parseInt(hm2[2])) * 60;
   const hOnly = v.match(/^(\d+)h$/i);
   if (hOnly) return parseInt(hOnly[1]) * 3600;
   const mOnly = v.match(/^(\d+)m$/i);
@@ -45,20 +51,19 @@ function parseHours(val: string): number {
   return 0;
 }
 
-function fmtSeconds(s: number): string {
-  if (!s) return "0:00";
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  return `${h}:${String(m).padStart(2, "0")}`;
-}
-
-function fmtSecondsShort(s: number): string {
+function secsToDisplay(s: number): string {
   if (!s) return "";
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   if (m === 0) return `${h}h`;
   if (h === 0) return `${m}m`;
   return `${h}h${m}m`;
+}
+
+function secsToFmt(s: number): string {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return `${h}:${String(m).padStart(2, "0")}`;
 }
 
 function getWeekDays(refDate: Date): string[] {
@@ -73,16 +78,6 @@ function getWeekDays(refDate: Date): string[] {
   return days;
 }
 
-function fmtWeekLabel(days: string[]): string {
-  const from = new Date(days[0] + "T12:00:00");
-  const to = new Date(days[6] + "T12:00:00");
-  const fromStr = from.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
-  const toStr = to.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
-  const year = to.getFullYear();
-  const weekNum = getWeekNumber(from);
-  return `${fromStr} – ${toStr}  ·  Semana ${weekNum} · ${year}`;
-}
-
 function getWeekNumber(d: Date): number {
   const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const dayNum = date.getUTCDay() || 7;
@@ -91,8 +86,16 @@ function getWeekNumber(d: Date): number {
   return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 }
 
+function fmtWeekLabel(days: string[]): string {
+  const from = new Date(days[0] + "T12:00:00");
+  const to = new Date(days[6] + "T12:00:00");
+  const fromStr = from.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
+  const toStr = to.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
+  return `${fromStr} – ${toStr}  ·  Semana ${getWeekNumber(from)} · ${to.getFullYear()}`;
+}
+
 const DAY_LABELS = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
-const JORNADA_SEMANAL = 40 * 3600; // 40 horas
+const JORNADA_SEMANAL = 40 * 3600;
 
 export default function Dashboard() {
   const now = new Date();
@@ -103,6 +106,7 @@ export default function Dashboard() {
   const [user, setUser] = useState<{ accountId: string; displayName: string; email: string; avatarUrl: string } | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [activeTimerTicket, setActiveTimerTicket] = useState<{ key: string; summary: string } | null>(null);
+  const [loading, setLoading] = useState(false);
 
   // Buscador
   const [query, setQuery] = useState("");
@@ -112,15 +116,16 @@ export default function Dashboard() {
   const searchRef = useRef<HTMLDivElement>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Estado de guardado
+  // Estado guardado
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [pendingChanges, setPendingChanges] = useState(false);
 
   const days = getWeekDays(refDate);
+  const pendingChanges = rows.some(r => Object.values(r.cells).some(c => c.dirty));
 
   useEffect(() => { fetchUser(); }, []);
+  useEffect(() => { fetchWeekData(); }, [refDate]);
 
   useEffect(() => {
     const h = (e: MouseEvent) => { if (searchRef.current && !searchRef.current.contains(e.target as Node)) setShowResults(false); };
@@ -131,6 +136,55 @@ export default function Dashboard() {
     const res = await fetch("/api/auth/me");
     if (res.status === 401) { setSessionExpired(true); return; }
     if (res.ok) { const data = await res.json(); setUser(data.user); }
+  };
+
+  const fetchWeekData = async () => {
+    const weekDays = getWeekDays(refDate);
+    const from = weekDays[0];
+    const to = weekDays[6];
+    setLoading(true); setSaveSuccess(false); setSaveError("");
+    const res = await fetch(`/api/jira/timesheet?from=${from}&to=${to}`);
+    if (res.status === 401) { setSessionExpired(true); return; }
+    if (!res.ok) { setLoading(false); return; }
+    const data = await res.json();
+    const entries: any[] = data.entries || [];
+
+    // Agrupar por issueKey
+    const issueMap: Record<string, { issue: Issue; cells: Record<string, WorklogCell> }> = {};
+    for (const entry of entries) {
+      if (!issueMap[entry.issueKey]) {
+        issueMap[entry.issueKey] = {
+          issue: {
+            key: entry.issueKey,
+            summary: entry.issueSummary,
+            status: entry.status || "",
+            project: entry.project,
+            projectKey: entry.projectKey,
+            issueType: entry.issueType,
+            parentKey: entry.parentKey,
+            parentSummary: entry.parentSummary,
+          },
+          cells: {},
+        };
+      }
+      // Si ya hay una celda para este día, sumar segundos
+      const existing = issueMap[entry.issueKey].cells[entry.date];
+      if (existing) {
+        existing.seconds += entry.timeSpentSeconds;
+        existing.raw = secsToDisplay(existing.seconds);
+      } else {
+        issueMap[entry.issueKey].cells[entry.date] = {
+          worklogId: entry.worklogId,
+          seconds: entry.timeSpentSeconds,
+          raw: secsToDisplay(entry.timeSpentSeconds),
+          comment: entry.comment || "",
+          dirty: false,
+        };
+      }
+    }
+
+    setRows(Object.values(issueMap).map(v => ({ issue: v.issue, cells: v.cells })));
+    setLoading(false);
   };
 
   const handleSearch = (val: string) => {
@@ -147,110 +201,128 @@ export default function Dashboard() {
 
   const addIssue = (issue: Issue) => {
     if (rows.find(r => r.issue.key === issue.key)) { setQuery(""); setShowResults(false); return; }
-    setRows(prev => [...prev, { issue, byDay: {}, byDaySeconds: {} }]);
+    setRows(prev => [...prev, { issue, cells: {} }]);
     setQuery(""); setShowResults(false);
   };
 
-  const removeRow = (key: string) => {
-    setRows(prev => prev.filter(r => r.issue.key !== key));
-    setPendingChanges(true);
-  };
+  const removeRow = (key: string) => setRows(prev => prev.filter(r => r.issue.key !== key));
 
   const updateCell = (issueKey: string, date: string, raw: string) => {
-    const seconds = parseHours(raw);
-    setRows(prev => prev.map(r => r.issue.key === issueKey ? {
-      ...r,
-      byDay: { ...r.byDay, [date]: raw },
-      byDaySeconds: { ...r.byDaySeconds, [date]: seconds },
-    } : r));
-    setPendingChanges(true);
+    const seconds = parseToSeconds(raw);
+    setRows(prev => prev.map(r => {
+      if (r.issue.key !== issueKey) return r;
+      const existing = r.cells[date];
+      return {
+        ...r,
+        cells: {
+          ...r.cells,
+          [date]: {
+            worklogId: existing?.worklogId || null,
+            seconds,
+            raw,
+            comment: existing?.comment || "",
+            dirty: true,
+          },
+        },
+      };
+    }));
     setSaveSuccess(false);
   };
 
-  // Totales
-  const dayTotals: Record<string, number> = {};
-  let weekTotal = 0;
-  for (const day of days) {
-    dayTotals[day] = rows.reduce((acc, r) => acc + (r.byDaySeconds[day] || 0), 0);
-    weekTotal += dayTotals[day];
-  }
-
-  const rowTotals: Record<string, number> = {};
-  for (const row of rows) {
-    rowTotals[row.issue.key] = days.reduce((acc, d) => acc + (row.byDaySeconds[d] || 0), 0);
-  }
-
-  const prevWeek = () => { const d = new Date(refDate); d.setDate(d.getDate() - 7); setRefDate(d); };
-  const nextWeek = () => { const d = new Date(refDate); d.setDate(d.getDate() + 7); setRefDate(d); };
-  const goToday = () => setRefDate(new Date());
-
-  // Guardar en Jira
   const handleSave = async () => {
-    const toSave: { issueKey: string; date: string; seconds: number }[] = [];
+    setSaving(true); setSaveError(""); setSaveSuccess(false);
+    const errors: string[] = [];
+
     for (const row of rows) {
-      for (const day of days) {
-        const seconds = row.byDaySeconds[day] || 0;
-        if (seconds > 0) toSave.push({ issueKey: row.issue.key, date: day, seconds });
+      for (const [date, cell] of Object.entries(row.cells)) {
+        if (!cell.dirty) continue;
+        const hours = Math.floor(cell.seconds / 3600);
+        const minutes = Math.floor((cell.seconds % 3600) / 60);
+
+        if (cell.seconds === 0 && cell.worklogId) {
+          // Eliminar worklog existente
+          const res = await fetch("/api/jira/timesheet", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ issueKey: row.issue.key, worklogId: cell.worklogId }),
+          });
+          if (!res.ok) errors.push(row.issue.key);
+        } else if (cell.seconds > 0 && cell.worklogId) {
+          // Actualizar worklog existente
+          const res = await fetch("/api/jira/timesheet", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ issueKey: row.issue.key, worklogId: cell.worklogId, hours, minutes, comment: cell.comment, date }),
+          });
+          if (!res.ok) errors.push(row.issue.key);
+        } else if (cell.seconds > 0 && !cell.worklogId) {
+          // Crear worklog nuevo
+          const res = await fetch("/api/jira/worklog", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ entries: [{ issueKey: row.issue.key, hours, minutes, comment: cell.comment, date }] }),
+          });
+          const data = await res.json();
+          if (data.errors?.length > 0) errors.push(row.issue.key);
+        }
       }
     }
-    if (!toSave.length) return;
-    setSaving(true); setSaveError(""); setSaveSuccess(false);
-    const entries = toSave.map(t => ({
-      issueKey: t.issueKey,
-      hours: Math.floor(t.seconds / 3600),
-      minutes: Math.floor((t.seconds % 3600) / 60),
-      date: t.date,
-      comment: "",
-    }));
-    const res = await fetch("/api/jira/worklog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries }) });
-    if (res.status === 401) { setSessionExpired(true); setSaving(false); return; }
-    const data = await res.json();
-    if (data.errors?.length > 0) {
-      setSaveError(`No se pudieron guardar: ${data.errors.map((e: any) => e.issueKey).join(", ")}`);
+
+    if (errors.length > 0) {
+      setSaveError(`No se pudieron guardar: ${[...new Set(errors)].join(", ")}`);
     } else {
-      setSaveSuccess(true); setPendingChanges(false);
-      // Limpiar celdas guardadas
-      setRows(prev => prev.map(r => ({ ...r, byDay: {}, byDaySeconds: {} })));
+      setSaveSuccess(true);
+      // Recargar para obtener worklogIds reales
+      await fetchWeekData();
     }
     setSaving(false);
   };
 
   const handleTimerStop = (seconds: number, ticketKey: string, ticketSummary: string) => {
     const existing = rows.find(r => r.issue.key === ticketKey);
-    const todaySecs = existing?.byDaySeconds[today] || 0;
-    const newSecs = todaySecs + seconds;
-    const h = Math.floor(newSecs / 3600);
-    const m = Math.floor((newSecs % 3600) / 60);
-    const raw = m === 0 ? `${h}h` : `${h}h${m}m`;
+    const todayCell = existing?.cells[today];
+    const newSecs = (todayCell?.seconds || 0) + seconds;
     if (existing) {
-      updateCell(ticketKey, today, raw);
+      updateCell(ticketKey, today, secsToDisplay(newSecs));
     } else {
-      // necesitamos el issue — buscarlo
       fetch(`/api/jira/issues?q=${encodeURIComponent(ticketKey)}`).then(r => r.json()).then(data => {
         const issue = data.issues?.[0];
         if (issue) {
-          setRows(prev => [...prev, { issue, byDay: { [today]: raw }, byDaySeconds: { [today]: newSecs } }]);
-          setPendingChanges(true);
+          setRows(prev => [...prev, {
+            issue,
+            cells: { [today]: { worklogId: null, seconds: newSecs, raw: secsToDisplay(newSecs), comment: "", dirty: true } }
+          }]);
         }
       });
     }
     setActiveTimerTicket(null);
   };
 
-  const weekPct = Math.min((weekTotal / JORNADA_SEMANAL) * 100, 100);
-  const weekRemaining = Math.max(JORNADA_SEMANAL - weekTotal, 0);
-  const isWeekend = (d: string) => { const dow = new Date(d + "T12:00:00").getDay(); return dow === 0 || dow === 6; };
-
-  if (sessionExpired) {
-    return (
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-        <div style={{ background: '#fff', padding: 32, borderRadius: 4, maxWidth: 360, textAlign: 'center', borderTop: '3px solid #D4AF37' }}>
-          <p style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Sesión expirada</p>
-          <a href="/api/auth/logout" style={{ display: 'block', background: '#E30613', color: '#fff', padding: '10px', borderRadius: 3, textDecoration: 'none', fontWeight: 700 }}>Volver a ingresar</a>
-        </div>
-      </div>
-    );
+  // Totales
+  const dayTotals: Record<string, number> = {};
+  let weekTotal = 0;
+  for (const day of days) {
+    dayTotals[day] = rows.reduce((acc, r) => acc + (r.cells[day]?.seconds || 0), 0);
+    weekTotal += dayTotals[day];
   }
+  const rowTotals: Record<string, number> = {};
+  for (const row of rows) rowTotals[row.issue.key] = days.reduce((acc, d) => acc + (row.cells[d]?.seconds || 0), 0);
+
+  const prevWeek = () => { const d = new Date(refDate); d.setDate(d.getDate() - 7); setRefDate(d); };
+  const nextWeek = () => { const d = new Date(refDate); d.setDate(d.getDate() + 7); setRefDate(d); };
+  const goToday = () => setRefDate(new Date());
+  const isWeekend = (d: string) => { const dow = new Date(d + "T12:00:00").getDay(); return dow === 0 || dow === 6; };
+  const weekRemaining = Math.max(JORNADA_SEMANAL - weekTotal, 0);
+  const weekPct = Math.min((weekTotal / JORNADA_SEMANAL) * 100, 100);
+
+  if (sessionExpired) return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+      <div style={{ background: '#fff', padding: 32, borderRadius: 4, maxWidth: 360, textAlign: 'center', borderTop: '3px solid #D4AF37' }}>
+        <p style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Sesión expirada</p>
+        <a href="/api/auth/logout" style={{ display: 'block', background: '#E30613', color: '#fff', padding: '10px', borderRadius: 3, textDecoration: 'none', fontWeight: 700 }}>Volver a ingresar</a>
+      </div>
+    </div>
+  );
 
   return (
     <main style={{ minHeight: '100vh', background: '#ECF0F1', fontFamily: 'Arial, sans-serif', display: 'flex', flexDirection: 'column' }}>
@@ -263,34 +335,28 @@ export default function Dashboard() {
           PASO 1 · <span style={{ color: '#E30613', fontWeight: 700 }}>ELIGE</span> · PASO 2 · <span style={{ color: '#E30613', fontWeight: 700 }}>IMPUTA</span> · PASO 3 · <span style={{ color: '#E30613', fontWeight: 700 }}>GUARDA</span>
         </div>
 
-        {/* Header de página */}
+        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div>
             <h2 style={{ fontSize: 20, fontWeight: 700, color: '#E30613', margin: 0 }}>Registro de horas</h2>
             <p style={{ fontSize: 12, color: '#6B6B6B', margin: '4px 0 0' }}>Añade las incidencias en las que has trabajado y reparte las horas por día. Nada se envía a Jira hasta que pulsas Guardar.</p>
           </div>
-          {/* Navegación semana */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button onClick={prevWeek} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 12 }}>◀</button>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#1C1C1C', minWidth: 240, textAlign: 'center' }}>{fmtWeekLabel(days)}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#1C1C1C', minWidth: 260, textAlign: 'center' }}>{fmtWeekLabel(days)}</span>
             <button onClick={nextWeek} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 12 }}>▶</button>
-            <button onClick={goToday} style={{ fontSize: 11, fontWeight: 700, border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 10px', background: '#fff', cursor: 'pointer', color: '#1C1C1C' }}>Hoy</button>
+            <button onClick={goToday} style={{ fontSize: 11, fontWeight: 700, border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 10px', background: '#fff', cursor: 'pointer' }}>Hoy</button>
           </div>
         </div>
 
-        {/* Buscador global */}
+        {/* Buscador */}
         <div ref={searchRef} style={{ position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, padding: '8px 12px' }}>
             <svg style={{ width: 16, height: 16, color: '#9CA3AF', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-            <input
-              type="text"
-              value={query}
-              onChange={e => handleSearch(e.target.value)}
-              onFocus={() => query && setShowResults(true)}
+            <input type="text" value={query} onChange={e => handleSearch(e.target.value)} onFocus={() => query && setShowResults(true)}
               placeholder="Busca por clave, título o épica y pulsa Enter..."
-              style={{ flex: 1, border: 'none', outline: 'none', fontSize: 13, color: '#1C1C1C', background: 'transparent' }}
-            />
-            {searching && <div style={{ width: 14, height: 14, border: '2px solid #DCDEE0', borderTop: '2px solid #E30613', borderRadius: '50%', flexShrink: 0 }} />}
+              style={{ flex: 1, border: 'none', outline: 'none', fontSize: 13, color: '#1C1C1C', background: 'transparent' }} />
+            {searching && <div style={{ width: 14, height: 14, border: '2px solid #DCDEE0', borderTop: '2px solid #E30613', borderRadius: '50%', flexShrink: 0, animation: 'spin 0.8s linear infinite' }} />}
           </div>
           {showResults && searchResults.length > 0 && (
             <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30, background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, boxShadow: '0 4px 20px rgba(0,0,0,0.15)', maxHeight: 320, overflowY: 'auto', marginTop: 2 }}>
@@ -302,17 +368,15 @@ export default function Dashboard() {
                     style={{ width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderBottom: '1px solid #F0F0F0', background: already ? '#F9F9F9' : '#fff', cursor: already ? 'default' : 'pointer', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                     <span style={{ fontSize: 15, flexShrink: 0, marginTop: 1, color: ts.color }}>{ts.emoji}</span>
                     <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
                         <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: '#E30613' }}>{issue.key}</span>
                         <span style={{ fontSize: 11, color: '#9CA3AF' }}>{issue.project}</span>
                         {issue.parentSummary && <span style={{ fontSize: 11, color: '#9CA3AF' }}>· {issue.parentSummary}</span>}
-                        {already && <span style={{ fontSize: 10, color: '#10B981', fontWeight: 700 }}>✓ Ya agregada</span>}
+                        {already && <span style={{ fontSize: 10, color: '#10B981', fontWeight: 700 }}>✓ Ya en la tabla</span>}
                       </div>
                       <p style={{ margin: 0, fontSize: 13, color: '#1C1C1C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.summary}</p>
                     </div>
-                    <div style={{ flexShrink: 0 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLORS[issue.status] || '#9CA3AF', display: 'inline-block' }} />
-                    </div>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLORS[issue.status] || '#9CA3AF', display: 'inline-block', flexShrink: 0, marginTop: 4 }} />
                   </button>
                 );
               })}
@@ -331,37 +395,42 @@ export default function Dashboard() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: '#E30613' }}>
-                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 11, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.08em', minWidth: 320, position: 'sticky', left: 0, background: '#E30613', zIndex: 10 }}>
+                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 11, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.08em', minWidth: 340, position: 'sticky', left: 0, background: '#E30613', zIndex: 10 }}>
                     Incidencia
                   </th>
                   {days.map((d, i) => (
-                    <th key={d} style={{ textAlign: 'center', padding: '8px 6px', minWidth: 80, background: d === today ? '#C00000' : '#E30613', borderLeft: '1px solid rgba(255,255,255,0.15)' }}>
+                    <th key={d} style={{ textAlign: 'center', padding: '8px 6px', minWidth: 78, background: d === today ? '#C00000' : '#E30613', borderLeft: '1px solid rgba(255,255,255,0.15)' }}>
                       <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase' }}>{DAY_LABELS[i]}</div>
                       <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{new Date(d + "T12:00:00").getDate()}</div>
                     </th>
                   ))}
-                  <th style={{ textAlign: 'center', padding: '8px 12px', minWidth: 80, background: '#C00000', borderLeft: '1px solid rgba(255,255,255,0.15)', fontSize: 11, fontWeight: 700, color: '#fff', textTransform: 'uppercase' }}>
-                    Total
-                  </th>
+                  <th style={{ textAlign: 'center', padding: '8px 12px', minWidth: 72, background: '#C00000', borderLeft: '1px solid rgba(255,255,255,0.15)', fontSize: 11, fontWeight: 700, color: '#fff', textTransform: 'uppercase' }}>Total</th>
                   <th style={{ width: 32, background: '#E30613', borderLeft: '1px solid rgba(255,255,255,0.15)' }}></th>
                 </tr>
               </thead>
               <tbody>
-                {rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={days.length + 3} style={{ textAlign: 'center', padding: '48px 16px', color: '#9CA3AF' }}>
-                      <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
-                      <p style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Buscá una incidencia arriba para empezar</p>
-                      <p style={{ margin: '4px 0 0', fontSize: 12 }}>Podés buscar por clave (ej: JO-123), título o épica</p>
-                    </td>
-                  </tr>
+                {loading ? (
+                  <tr><td colSpan={days.length + 3} style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF', fontSize: 13 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      <div style={{ width: 16, height: 16, border: '2px solid #DCDEE0', borderTop: '2px solid #E30613', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                      Cargando registros de la semana...
+                    </div>
+                  </td></tr>
+                ) : rows.length === 0 ? (
+                  <tr><td colSpan={days.length + 3} style={{ textAlign: 'center', padding: '48px 16px', color: '#9CA3AF' }}>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>No hay registros esta semana</p>
+                    <p style={{ margin: '4px 0 0', fontSize: 12 }}>Buscá una incidencia arriba para agregar horas</p>
+                  </td></tr>
                 ) : rows.map((row, ri) => {
                   const ts = ISSUE_TYPE_STYLES[row.issue.issueType] || { emoji: "📄", color: "#9CA3AF" };
                   const rowTotal = rowTotals[row.issue.key] || 0;
+                  const hasDirty = Object.values(row.cells).some(c => c.dirty);
                   return (
                     <tr key={row.issue.key} style={{ borderBottom: '1px solid #F0F0F0', background: ri % 2 === 0 ? '#fff' : '#FAFAFA' }}>
                       <td style={{ padding: '10px 16px', position: 'sticky', left: 0, background: ri % 2 === 0 ? '#fff' : '#FAFAFA', zIndex: 5, borderRight: '1px solid #F0F0F0' }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                          {hasDirty && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#E30613', flexShrink: 0, marginTop: 6 }} title="Con cambios sin guardar" />}
                           <span style={{ fontSize: 15, marginTop: 2, color: ts.color, flexShrink: 0 }}>{ts.emoji}</span>
                           <div style={{ minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
@@ -369,57 +438,64 @@ export default function Dashboard() {
                               <span style={{ fontSize: 11, color: '#9CA3AF' }}>{row.issue.issueType}</span>
                             </div>
                             <p style={{ margin: 0, fontSize: 13, color: '#1C1C1C', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{row.issue.summary}</p>
-                            <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                              {row.issue.parentSummary && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 99, background: '#F3F4F6', color: '#6B6B6B', border: '1px solid #DCDEE0' }}>⚡ {row.issue.parentSummary}</span>}
-                              <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 99, background: '#F3F4F6', color: '#6B6B6B', border: '1px solid #DCDEE0' }}>{row.issue.project}</span>
-                              <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 99, background: '#F3F4F6', color: STATUS_COLORS[row.issue.status] || '#6B6B6B', border: '1px solid #DCDEE0', fontWeight: 700 }}>{row.issue.status}</span>
+                            <div style={{ display: 'flex', gap: 5, marginTop: 4, flexWrap: 'wrap' }}>
+                              {row.issue.parentSummary && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#F3F4F6', color: '#6B6B6B', border: '1px solid #DCDEE0' }}>⚡ {row.issue.parentSummary}</span>}
+                              <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#F3F4F6', color: '#6B6B6B', border: '1px solid #DCDEE0' }}>{row.issue.project}</span>
+                              {row.issue.status && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#F3F4F6', color: STATUS_COLORS[row.issue.status] || '#6B6B6B', border: '1px solid #DCDEE0', fontWeight: 700 }}>{row.issue.status}</span>}
                             </div>
                           </div>
                         </div>
                       </td>
                       {days.map(d => {
-                        const raw = row.byDay[d] ?? "";
-                        const secs = row.byDaySeconds[d] || 0;
+                        const cell = row.cells[d];
+                        const secs = cell?.seconds || 0;
+                        const raw = cell?.raw ?? "";
                         const we = isWeekend(d);
                         const isToday = d === today;
+                        const isDirty = cell?.dirty || false;
                         return (
-                          <td key={d} style={{ padding: '6px 4px', textAlign: 'center', borderLeft: '1px solid #F0F0F0', background: we ? '#F5F5F5' : isToday ? '#FFF9F0' : 'transparent', position: 'relative' }}>
+                          <td key={d} style={{ padding: '5px 3px', textAlign: 'center', borderLeft: '1px solid #F0F0F0', background: we ? '#F5F5F5' : isToday ? '#FFF9F0' : 'transparent', position: 'relative' }}>
                             {we ? (
                               <span style={{ color: '#DCDEE0', fontSize: 12 }}>—</span>
                             ) : (
-                              <input
-                                type="text"
-                                value={raw}
-                                onChange={e => updateCell(row.issue.key, d, e.target.value)}
-                                onFocus={e => { if (e.target.value === "0:00") e.target.value = ""; }}
-                                onBlur={e => {
-                                  const val = e.target.value.trim();
-                                  if (!val) return;
-                                  const s = parseHours(val);
-                                  updateCell(row.issue.key, d, s > 0 ? fmtSecondsShort(s) : "");
-                                }}
-                                placeholder="0:00"
-                                style={{
-                                  width: '100%', textAlign: 'center', border: secs > 0 ? '1px solid rgba(212,175,55,0.5)' : '1px solid transparent',
-                                  borderRadius: 3, padding: '5px 4px', fontSize: 13, fontWeight: secs > 0 ? 700 : 400,
-                                  color: secs > 0 ? '#1C1C1C' : '#DCDEE0', background: secs > 0 ? '#FFFDF0' : 'transparent',
-                                  outline: 'none', cursor: 'text',
-                                }}
-                                onMouseOver={e => { if (!secs) e.currentTarget.style.borderColor = '#DCDEE0'; }}
-                                onMouseOut={e => { if (!secs) e.currentTarget.style.borderColor = 'transparent'; }}
-                              />
-                            )}
-                            {secs > 0 && !we && (
-                              <div style={{ position: 'absolute', top: 2, right: 3, width: 5, height: 5, borderRadius: '50%', background: '#E30613' }} />
+                              <>
+                                <input
+                                  type="text"
+                                  value={raw}
+                                  onChange={e => updateCell(row.issue.key, d, e.target.value)}
+                                  onBlur={e => {
+                                    const val = e.target.value.trim();
+                                    const s = parseToSeconds(val);
+                                    updateCell(row.issue.key, d, s > 0 ? secsToDisplay(s) : "");
+                                  }}
+                                  placeholder="0:00"
+                                  style={{
+                                    width: '100%', textAlign: 'center',
+                                    border: secs > 0 ? `1px solid ${isDirty ? 'rgba(212,175,55,0.8)' : 'rgba(212,175,55,0.3)'}` : '1px solid transparent',
+                                    borderRadius: 3, padding: '5px 3px', fontSize: 13,
+                                    fontWeight: secs > 0 ? 700 : 400,
+                                    color: secs > 0 ? '#1C1C1C' : '#DCDEE0',
+                                    background: secs > 0 ? (isDirty ? '#FFFBEB' : '#FFFDF0') : 'transparent',
+                                    outline: 'none', cursor: 'text',
+                                  }}
+                                  onFocus={e => { e.currentTarget.style.borderColor = '#E30613'; e.currentTarget.style.background = '#FFF5F5'; }}
+                                  onBlurCapture={e => {
+                                    const s = parseToSeconds(e.currentTarget.value);
+                                    e.currentTarget.style.borderColor = s > 0 ? 'rgba(212,175,55,0.5)' : 'transparent';
+                                    e.currentTarget.style.background = s > 0 ? '#FFFDF0' : 'transparent';
+                                  }}
+                                />
+                                {secs > 0 && <div style={{ position: 'absolute', top: 2, right: 3, width: 5, height: 5, borderRadius: '50%', background: isDirty ? '#F59E0B' : '#10B981' }} title={isDirty ? 'Sin guardar' : 'Guardado en Jira'} />}
+                              </>
                             )}
                           </td>
                         );
                       })}
                       <td style={{ textAlign: 'center', padding: '6px 8px', borderLeft: '1px solid #F0F0F0', fontWeight: 700, fontSize: 13, color: rowTotal > 0 ? '#1C1C1C' : '#DCDEE0' }}>
-                        {rowTotal > 0 ? fmtSecondsShort(rowTotal) : "—"}
+                        {rowTotal > 0 ? secsToDisplay(rowTotal) : "—"}
                       </td>
                       <td style={{ textAlign: 'center', padding: '6px 4px', borderLeft: '1px solid #F0F0F0' }}>
-                        <button onClick={() => removeRow(row.issue.key)} title="Quitar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DCDEE0', fontSize: 16 }}
+                        <button onClick={() => removeRow(row.issue.key)} title="Quitar de la vista" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DCDEE0', fontSize: 16 }}
                           onMouseOver={e => e.currentTarget.style.color = '#E30613'} onMouseOut={e => e.currentTarget.style.color = '#DCDEE0'}>✕</button>
                       </td>
                     </tr>
@@ -429,23 +505,21 @@ export default function Dashboard() {
               {rows.length > 0 && (
                 <tfoot>
                   <tr style={{ background: '#1C1C1C', borderTop: '2px solid rgba(212,175,55,0.4)' }}>
-                    <td style={{ padding: '8px 16px', position: 'sticky', left: 0, background: '#1C1C1C', zIndex: 5, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                      Total semana
-                    </td>
+                    <td style={{ padding: '8px 16px', position: 'sticky', left: 0, background: '#1C1C1C', zIndex: 5, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Total del día</td>
                     {days.map(d => {
                       const s = dayTotals[d] || 0;
+                      const we = isWeekend(d);
                       const isOver = s > 8 * 3600;
                       const isFull = s >= 8 * 3600;
-                      const we = isWeekend(d);
                       return (
                         <td key={d} style={{ textAlign: 'center', padding: '8px 4px', borderLeft: '1px solid rgba(255,255,255,0.08)', opacity: we ? 0.3 : 1 }}>
-                          {s > 0 ? <span style={{ fontSize: 13, fontWeight: 700, color: isOver ? '#EF4444' : isFull ? '#10B981' : '#F59E0B' }}>{isOver ? '⚠ ' : ''}{fmtSecondsShort(s)}</span>
+                          {s > 0 ? <span style={{ fontSize: 13, fontWeight: 700, color: isOver ? '#EF4444' : isFull ? '#10B981' : '#F59E0B' }}>{isOver ? '⚠ ' : ''}{secsToDisplay(s)}</span>
                             : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>—</span>}
                         </td>
                       );
                     })}
-                    <td style={{ textAlign: 'center', padding: '8px', borderLeft: '1px solid rgba(255,255,255,0.08)' }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: weekTotal >= JORNADA_SEMANAL ? '#10B981' : '#fff' }}>{fmtSecondsShort(weekTotal)}</span>
+                    <td style={{ textAlign: 'center', padding: '8px', borderLeft: '1px solid rgba(255,255,255,0.08)', background: weekTotal >= JORNADA_SEMANAL ? '#1F4A2A' : '#1C1C1C' }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: weekTotal >= JORNADA_SEMANAL ? '#10B981' : '#fff' }}>{secsToDisplay(weekTotal) || '0h'}</span>
                     </td>
                     <td style={{ borderLeft: '1px solid rgba(255,255,255,0.08)' }}></td>
                   </tr>
@@ -455,23 +529,20 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Footer con progreso y acciones */}
+        {/* Footer */}
         <div style={{ background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          {/* Progreso semanal */}
-          <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5 }}>
               <span style={{ fontSize: 12, color: '#6B6B6B' }}>Semana:</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#1C1C1C' }}>{fmtSeconds(weekTotal)}</span>
-              <span style={{ fontSize: 12, color: '#9CA3AF' }}>de {fmtSeconds(JORNADA_SEMANAL)}</span>
-              {weekRemaining > 0 && <span style={{ fontSize: 12, color: '#E30613' }}>· faltan {fmtSeconds(weekRemaining)}</span>}
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#1C1C1C' }}>{secsToFmt(weekTotal)}</span>
+              <span style={{ fontSize: 12, color: '#9CA3AF' }}>de {secsToFmt(JORNADA_SEMANAL)}</span>
+              {weekRemaining > 0 && <span style={{ fontSize: 12, color: '#E30613' }}>· faltan {secsToFmt(weekRemaining)}</span>}
               {weekRemaining === 0 && <span style={{ fontSize: 12, color: '#10B981', fontWeight: 700 }}>· ✓ Semana completa</span>}
             </div>
             <div style={{ height: 6, background: '#ECF0F1', borderRadius: 99, overflow: 'hidden' }}>
               <div style={{ height: '100%', background: weekTotal >= JORNADA_SEMANAL ? '#10B981' : '#E30613', width: `${weekPct}%`, transition: 'width 0.3s', borderRadius: 99 }} />
             </div>
           </div>
-
-          {/* Acciones */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             {saveError && <span style={{ fontSize: 12, color: '#E30613' }}>{saveError}</span>}
             {saveSuccess && <span style={{ fontSize: 12, color: '#10B981', fontWeight: 700 }}>✓ Guardado en Jira</span>}
@@ -479,13 +550,14 @@ export default function Dashboard() {
             {!pendingChanges && !saveSuccess && rows.length > 0 && <span style={{ fontSize: 12, color: '#9CA3AF' }}>Sin cambios pendientes</span>}
             <button
               onClick={handleSave}
-              disabled={saving || !pendingChanges || rows.length === 0}
-              style={{ background: (!pendingChanges || rows.length === 0) ? '#ECF0F1' : '#E30613', color: (!pendingChanges || rows.length === 0) ? '#9CA3AF' : '#fff', border: 'none', borderRadius: 3, padding: '8px 20px', fontSize: 13, fontWeight: 700, cursor: (!pendingChanges || rows.length === 0) ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+              disabled={saving || !pendingChanges}
+              style={{ background: !pendingChanges ? '#ECF0F1' : '#E30613', color: !pendingChanges ? '#9CA3AF' : '#fff', border: 'none', borderRadius: 3, padding: '8px 20px', fontSize: 13, fontWeight: 700, cursor: !pendingChanges ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
               {saving ? 'Guardando...' : 'Guardar en Jira'}
             </button>
           </div>
         </div>
       </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </main>
   );
 }
