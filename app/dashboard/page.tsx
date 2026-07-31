@@ -1,32 +1,19 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import AppHeader from "@/components/AppHeader";
 
-interface Project { key: string; name: string; }
 interface Issue {
   key: string; summary: string; status: string;
-  project: string; issueType: string;
+  project: string; projectKey: string; issueType: string;
   parentKey: string | null; parentSummary: string | null;
 }
-interface Entry {
-  issueKey: string; summary: string;
-  hours: number; minutes: number;
-  comment: string; timeRaw?: string; timeError?: boolean;
+
+interface RowEntry {
+  issue: Issue;
+  byDay: Record<string, string>; // date -> raw input value
+  byDaySeconds: Record<string, number>; // date -> parsed seconds
 }
-interface Group { parentKey: string | null; parentSummary: string | null; issues: Issue[]; }
-
-const JORNADA_HORAS = 8;
-
-const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
-  "In Development": { bg: "#EBF5FF", text: "#1E40AF", dot: "#3B82F6" },
-  "In Progress":    { bg: "#EBF5FF", text: "#1E40AF", dot: "#3B82F6" },
-  "On Hold":        { bg: "#FFFBEB", text: "#92400E", dot: "#F59E0B" },
-  "To Do":          { bg: "#F9FAFB", text: "#374151", dot: "#9CA3AF" },
-  "Done":           { bg: "#ECFDF5", text: "#065F46", dot: "#10B981" },
-  "Closed":         { bg: "#ECFDF5", text: "#065F46", dot: "#10B981" },
-  "Blocked":        { bg: "#FEF2F2", text: "#991B1B", dot: "#EF4444" },
-};
 
 const ISSUE_TYPE_STYLES: Record<string, { emoji: string; color: string }> = {
   "Epic":     { emoji: "⚡", color: "#7C3AED" },
@@ -36,495 +23,468 @@ const ISSUE_TYPE_STYLES: Record<string, { emoji: string; color: string }> = {
   "Bug":      { emoji: "🐛", color: "#DC2626" },
 };
 
-// ── PARSE HORAS EN FORMATO LIBRE ──────────────────────────────────────────────
-function parseHours(val: string): number | null {
+const STATUS_COLORS: Record<string, string> = {
+  "In Development": "#3B82F6", "In Progress": "#3B82F6",
+  "On Hold": "#F59E0B", "To Do": "#9CA3AF",
+  "Done": "#10B981", "Closed": "#10B981", "Blocked": "#EF4444",
+};
+
+// ── PARSE HORAS ───────────────────────────────────────────────────────────────
+function parseHours(val: string): number {
   const v = val.trim();
-  if (!v) return null;
-  if (/^\d+(\.\d+)?$/.test(v)) return parseFloat(v);
+  if (!v || v === "0:00" || v === "0") return 0;
+  if (/^\d+(\.\d+)?$/.test(v)) return parseFloat(v) * 3600;
   const hm1 = v.match(/^(\d+):(\d+)$/);
-  if (hm1) return parseInt(hm1[1]) + parseInt(hm1[2]) / 60;
+  if (hm1) return (parseInt(hm1[1]) + parseInt(hm1[2]) / 60) * 3600;
   const hm2 = v.match(/^(\d+)h(\d+)m?$/i);
-  if (hm2) return parseInt(hm2[1]) + parseInt(hm2[2]) / 60;
+  if (hm2) return (parseInt(hm2[1]) + parseInt(hm2[2]) / 60) * 3600;
   const hOnly = v.match(/^(\d+)h$/i);
-  if (hOnly) return parseInt(hOnly[1]);
+  if (hOnly) return parseInt(hOnly[1]) * 3600;
   const mOnly = v.match(/^(\d+)m$/i);
-  if (mOnly) return parseInt(mOnly[1]) / 60;
-  return null;
+  if (mOnly) return parseInt(mOnly[1]) * 60;
+  return 0;
 }
 
-function hoursToDisplay(hours: number, minutes: number): string {
-  if (hours === 0 && minutes === 0) return "";
-  if (minutes === 0) return `${hours}h`;
-  if (hours === 0) return `${minutes}m`;
-  return `${hours}h ${minutes}m`;
+function fmtSeconds(s: number): string {
+  if (!s) return "0:00";
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return `${h}:${String(m).padStart(2, "0")}`;
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const c = STATUS_COLORS[status] || { bg: "#F9FAFB", text: "#374151", dot: "#9CA3AF" };
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 500, background: c.bg, color: c.text }}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.dot }} />{status}
-    </span>
-  );
+function fmtSecondsShort(s: number): string {
+  if (!s) return "";
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (m === 0) return `${h}h`;
+  if (h === 0) return `${m}m`;
+  return `${h}h${m}m`;
 }
 
-function SessionExpiredBanner() {
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 4, padding: 32, maxWidth: 380, width: '100%', textAlign: 'center', borderTop: '3px solid #D4AF37' }}>
-        <h3 style={{ fontSize: 17, fontWeight: 700, color: '#1C1C1C', margin: '0 0 8px' }}>Sesión expirada</h3>
-        <p style={{ fontSize: 13, color: '#6B6B6B', margin: '0 0 20px' }}>Tu sesión venció. Necesitás volver a iniciar sesión.</p>
-        <a href="/api/auth/logout" style={{ display: 'block', background: '#E30613', color: '#fff', fontWeight: 700, padding: '11px', borderRadius: 3, textDecoration: 'none', fontSize: 13 }}>Volver a ingresar</a>
-      </div>
-    </div>
-  );
-}
-
-function OnboardingModal({ onDismiss }: { onDismiss: () => void }) {
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 4, padding: 32, maxWidth: 440, width: '100%', borderTop: '3px solid #D4AF37' }}>
-        <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1C1C1C', margin: '0 0 4px' }}>¡Bienvenido a Carga de Horas!</h3>
-        <p style={{ fontSize: 13, color: '#6B6B6B', margin: '0 0 20px' }}>Así funciona en 3 pasos simples:</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 24 }}>
-          {[
-            ["1", "Elegí el proyecto", "Buscá y seleccioná el proyecto de Jira en el panel izquierdo."],
-            ["2", "Agregá los tickets", "Expandí la épica y hacé click en '+ Agregar' en cada ticket."],
-            ["3", "Imputá las horas", "Ingresá las horas en formato libre (2h30, 90m, 1:30) y confirmá."],
-          ].map(([num, title, desc]) => (
-            <div key={num} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              <div style={{ width: 28, height: 28, background: '#E30613', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{num}</div>
-              <div><p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1C1C1C' }}>{title}</p><p style={{ margin: '2px 0 0', fontSize: 12, color: '#6B6B6B' }}>{desc}</p></div>
-            </div>
-          ))}
-        </div>
-        <button onClick={onDismiss} style={{ width: '100%', background: '#E30613', color: '#fff', border: 'none', borderRadius: 3, padding: '11px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-          ¡Entendido, empezar!
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ProjectSelector({ projects, value, onChange }: { projects: Project[]; value: string; onChange: (k: string) => void }) {
-  const [search, setSearch] = useState(""); const [open, setOpen] = useState(false); const ref = useRef<HTMLDivElement>(null);
-  const selected = projects.find(p => p.key === value);
-  const filtered = projects.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.key.toLowerCase().includes(search.toLowerCase()));
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
-  }, []);
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <button onClick={() => setOpen(!open)} style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '8px 12px', fontSize: 13, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', cursor: 'pointer' }}>
-        {selected ? <span style={{ color: '#1C1C1C' }}>{selected.name} <span style={{ color: '#E30613', fontFamily: 'monospace', fontWeight: 700 }}>({selected.key})</span></span> : <span style={{ color: '#9CA3AF' }}>— Elegí un proyecto —</span>}
-        <span style={{ color: '#9CA3AF', fontSize: 10 }}>{open ? '▲' : '▼'}</span>
-      </button>
-      {open && (
-        <div style={{ position: 'absolute', zIndex: 20, width: '100%', marginTop: 2, background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
-          <div style={{ padding: 8, borderBottom: '1px solid #DCDEE0' }}>
-            <input autoFocus type="text" placeholder="Buscar proyecto..." value={search} onChange={e => setSearch(e.target.value)}
-              style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '6px 10px', fontSize: 12, outline: 'none' }} />
-          </div>
-          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
-            {filtered.length === 0 ? <p style={{ padding: '12px', fontSize: 12, color: '#9CA3AF', textAlign: 'center', margin: 0 }}>Sin resultados</p>
-              : filtered.map(p => (
-                <button key={p.key} onClick={() => { onChange(p.key); setOpen(false); setSearch(""); }}
-                  style={{ width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 12, background: value === p.key ? '#FBEEEE' : 'transparent', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: '#1C1C1C' }}>{p.name}</span>
-                  <span style={{ color: '#E30613', fontFamily: 'monospace', fontSize: 11, fontWeight: 700 }}>{p.key}</span>
-                </button>
-              ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function EpicGroup({ group, entries, onAdd, onStartTimer }: { group: Group; entries: Entry[]; onAdd: (i: Issue) => void; onStartTimer: (i: Issue) => void }) {
-  const [collapsed, setCollapsed] = useState(true);
-  const isEpic = !!group.parentKey;
-  const addedCount = group.issues.filter(i => entries.some(e => e.issueKey === i.key)).length;
-  return (
-    <div style={{ marginBottom: 8 }}>
-      <button onClick={() => setCollapsed(!collapsed)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 3, background: isEpic ? '#FBEEEE' : '#F9FAFB', border: `1px solid ${isEpic ? 'rgba(212,175,55,0.3)' : '#DCDEE0'}`, cursor: 'pointer', textAlign: 'left' }}>
-        <span style={{ fontSize: 10, color: '#9CA3AF', transform: collapsed ? 'rotate(-90deg)' : 'none', display: 'inline-block', transition: 'transform 0.12s' }}>▼</span>
-        {isEpic ? (<><span style={{ fontSize: 13 }}>⚡</span><span style={{ fontSize: 12, fontWeight: 700, color: '#1C1C1C', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.parentSummary}</span><span style={{ fontSize: 11, color: '#E30613', fontFamily: 'monospace', fontWeight: 700, flexShrink: 0 }}>{group.parentKey}</span></>)
-          : <span style={{ fontSize: 12, fontWeight: 700, color: '#9CA3AF', flex: 1 }}>Sin épica</span>}
-        <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 99, background: addedCount > 0 ? '#FBEEEE' : '#F3F4F6', color: addedCount > 0 ? '#E30613' : '#6B6B6B', flexShrink: 0 }}>
-          {addedCount > 0 ? `${addedCount}/` : ""}{group.issues.length}
-        </span>
-      </button>
-      {!collapsed && (
-        <div style={{ marginLeft: 12, marginTop: 4, paddingLeft: 12, borderLeft: `2px solid ${isEpic ? 'rgba(212,175,55,0.4)' : '#DCDEE0'}` }}>
-          {group.issues.map(issue => {
-            const added = entries.some(e => e.issueKey === issue.key);
-            return (
-              <div key={issue.key} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '8px 10px', marginBottom: 4, borderRadius: 3, border: `1px solid ${added ? 'rgba(212,175,55,0.4)' : '#DCDEE0'}`, background: added ? '#FFFDF0' : '#fff', gap: 8 }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#1C1C1C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.summary}</p>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#E30613' }}>{issue.key}</span>
-                    <StatusBadge status={issue.status} />
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                  <button onClick={() => onStartTimer(issue)} title="Iniciar timer" style={{ fontSize: 11, border: '1px solid rgba(212,175,55,0.5)', borderRadius: 3, padding: '3px 6px', background: '#FFFDF0', cursor: 'pointer', color: '#856404' }}>⏱</button>
-                  <button onClick={() => onAdd(issue)} disabled={added} style={{ fontSize: 11, border: `1px solid ${added ? '#D4AF37' : '#DCDEE0'}`, borderRadius: 3, padding: '3px 8px', background: added ? '#FFFDF0' : '#fff', color: added ? '#856404' : '#E30613', cursor: added ? 'default' : 'pointer', fontWeight: 700 }}>
-                    {added ? "✓" : "+ Agregar"}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CalendarView({ onTodayHours }: { onTodayHours: (h: number) => void }) {
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [dailyHours, setDailyHours] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(false);
-  const today = now.toISOString().split("T")[0];
-  const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-  const DAYS = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
-
-  useEffect(() => { fetchCalendar(); }, [year, month]);
-  const fetchCalendar = async () => {
-    setLoading(true);
-    const res = await fetch(`/api/jira/calendar?year=${year}&month=${month}`);
-    if (res.ok) { const data = await res.json(); setDailyHours(data.dailyHours || {}); if (year === now.getFullYear() && month === now.getMonth() + 1) onTodayHours(data.dailyHours?.[today] || 0); }
-    setLoading(false);
-  };
-  const prevMonth = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
-  const nextMonth = () => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
-  const firstDay = new Date(year, month - 1, 1).getDay();
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const cells: (number | null)[] = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
-  while (cells.length % 7 !== 0) cells.push(null);
-
-  const getDayStyle = (dateStr: string, dow: number) => {
-    const isWeekend = dow === 0 || dow === 6;
-    const hours = dailyHours[dateStr] || 0;
-    const isFuture = dateStr > today;
-    if (isWeekend) return { bg: '#F9FAFB', numColor: '#D1D5DB', bar: null, label: null };
-    if (isFuture) return { bg: '#fff', numColor: '#9CA3AF', bar: null, label: null };
-    if (hours > JORNADA_HORAS) return { bg: '#FEF2F2', numColor: '#991B1B', bar: '#EF4444', label: `⚠ ${hours.toFixed(1)}h` };
-    if (hours >= JORNADA_HORAS) return { bg: '#ECFDF5', numColor: '#065F46', bar: '#10B981', label: `${hours.toFixed(1)}h` };
-    if (hours > 0) return { bg: '#FFFBEB', numColor: '#92400E', bar: '#F59E0B', label: `${hours.toFixed(1)}h` };
-    return { bg: '#FEF2F2', numColor: '#FDA4AF', bar: null, label: null };
-  };
-
-  const totalHours = Object.values(dailyHours).reduce((a, b) => a + b, 0);
-  const workedDays = Object.keys(dailyHours).filter(d => { const dow = new Date(d + "T12:00:00").getDay(); return dow !== 0 && dow !== 6; }).length;
-
-  return (
-    <div style={{ background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, boxShadow: '0 1px 0 rgba(28,28,28,0.04), 0 8px 24px -12px rgba(28,28,28,0.25)', padding: 20 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-        <div>
-          <h2 style={{ fontSize: 14, fontWeight: 700, color: '#1C1C1C', margin: 0 }}>Calendario de imputaciones</h2>
-          <p style={{ fontSize: 11, color: '#6B6B6B', margin: '3px 0 0' }}>{loading ? 'Cargando...' : `${workedDays} días imputados · ${totalHours.toFixed(1)}h totales`}</p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={prevMonth} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#F9FAFB', cursor: 'pointer', fontSize: 12 }}>◀</button>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#1C1C1C', minWidth: 120, textAlign: 'center' }}>{MONTHS[month - 1]} {year}</span>
-          <button onClick={nextMonth} disabled={year === now.getFullYear() && month === now.getMonth() + 1} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#F9FAFB', cursor: 'pointer', fontSize: 12, opacity: (year === now.getFullYear() && month === now.getMonth() + 1) ? 0.4 : 1 }}>▶</button>
-        </div>
-      </div>
-      <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
-        {[['#10B981','Completo (8h)'],['#F59E0B','Parcial'],['#FDA4AF','Sin imputar'],['#EF4444','Más de 8h']].map(([c,l]) => (
-          <span key={l} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#6B6B6B' }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: c, display: 'inline-block' }} />{l}
-          </span>
-        ))}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
-        {DAYS.map(d => <div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: '#6B6B6B', padding: '4px 0', background: '#F9FAFB', borderRadius: 2 }}>{d}</div>)}
-        {cells.map((day, idx) => {
-          if (!day) return <div key={`e-${idx}`} />;
-          const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-          const { bg, numColor, bar, label } = getDayStyle(dateStr, idx % 7);
-          const isToday = dateStr === today;
-          return (
-            <div key={dateStr} style={{ background: bg, borderRadius: 3, padding: '4px 5px', minHeight: 52, display: 'flex', flexDirection: 'column', outline: isToday ? '2px solid #E30613' : 'none', outlineOffset: -2 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: isToday ? '#E30613' : numColor }}>{day}</span>
-              {bar && (<div style={{ marginTop: 'auto' }}><div style={{ height: 4, borderRadius: 99, background: bar, marginTop: 4, width: `${Math.min((dailyHours[dateStr] || 0) / JORNADA_HORAS * 100, 100)}%` }} /><span style={{ fontSize: 9, color: '#6B6B6B', marginTop: 2, display: 'block' }}>{label}</span></div>)}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function groupIssues(issues: Issue[]): Group[] {
-  const groups: Record<string, Group> = {};
-  for (const issue of issues) {
-    const key = issue.parentKey || "__none__";
-    if (!groups[key]) groups[key] = { parentKey: issue.parentKey, parentSummary: issue.parentSummary, issues: [] };
-    groups[key].issues.push(issue);
+function getWeekDays(refDate: Date): string[] {
+  const days: string[] = [];
+  const monday = new Date(refDate);
+  monday.setDate(refDate.getDate() - ((refDate.getDay() + 6) % 7));
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    days.push(d.toISOString().split("T")[0]);
   }
-  return Object.values(groups).sort((a, b) => { if (a.parentKey === null) return 1; if (b.parentKey === null) return -1; return (a.parentKey || "").localeCompare(b.parentKey || ""); });
+  return days;
 }
 
-function validateEntries(entries: Entry[]): string | null {
-  for (const e of entries) {
-    if (e.timeError) return `${e.issueKey}: formato no válido. Usá 2, 2:30, 2h30 o 90m.`;
-    if (e.hours === 0 && e.minutes === 0) return `${e.issueKey}: el tiempo no puede ser 0. Poné al menos 1 minuto.`;
-    if (e.hours > 24) return `${e.issueKey}: no podés imputar más de 24h en un día.`;
-    if (e.minutes > 59) return `${e.issueKey}: los minutos deben ser entre 0 y 59.`;
-  }
-  if (entries.reduce((acc, e) => acc + e.hours + e.minutes / 60, 0) > 24) return "El total supera las 24h. Revisá los valores.";
-  return null;
+function fmtWeekLabel(days: string[]): string {
+  const from = new Date(days[0] + "T12:00:00");
+  const to = new Date(days[6] + "T12:00:00");
+  const fromStr = from.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
+  const toStr = to.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
+  const year = to.getFullYear();
+  const weekNum = getWeekNumber(from);
+  return `${fromStr} – ${toStr}  ·  Semana ${weekNum} · ${year}`;
 }
+
+function getWeekNumber(d: Date): number {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
+
+const DAY_LABELS = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
+const JORNADA_SEMANAL = 40 * 3600; // 40 horas
 
 export default function Dashboard() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProject, setSelectedProject] = useState("");
-  const [issues, setIssues] = useState<Issue[]>([]);
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [loadingProjects, setLoadingProjects] = useState(true);
-  const [loadingIssues, setLoadingIssues] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [error, setError] = useState("");
-  const [sessionExpired, setSessionExpired] = useState(false);
+  const now = new Date();
+  const today = now.toISOString().split("T")[0];
+
+  const [refDate, setRefDate] = useState(now);
+  const [rows, setRows] = useState<RowEntry[]>([]);
   const [user, setUser] = useState<{ accountId: string; displayName: string; email: string; avatarUrl: string } | null>(null);
-  const [issueSearch, setIssueSearch] = useState("");
-  const [alreadyLoggedToday, setAlreadyLoggedToday] = useState(0);
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [activeTimerTicket, setActiveTimerTicket] = useState<{ key: string; summary: string } | null>(null);
 
+  // Buscador
+  const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Issue[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Estado de guardado
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [pendingChanges, setPendingChanges] = useState(false);
+
+  const days = getWeekDays(refDate);
+
+  useEffect(() => { fetchUser(); }, []);
+
   useEffect(() => {
-    fetchUser(); fetchProjects();
-    if (!localStorage.getItem("onboarding-seen")) setShowOnboarding(true);
+    const h = (e: MouseEvent) => { if (searchRef.current && !searchRef.current.contains(e.target as Node)) setShowResults(false); };
+    document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
   }, []);
-  useEffect(() => { if (selectedProject) fetchIssues(selectedProject); else setIssues([]); setIssueSearch(""); }, [selectedProject]);
 
-  const fetchUser = async () => { const res = await fetch("/api/auth/me"); if (res.status === 401) { setSessionExpired(true); return; } if (res.ok) { const data = await res.json(); setUser(data.user); } };
-  const fetchProjects = async () => {
-    setLoadingProjects(true);
-    const res = await fetch("/api/jira/issues");
+  const fetchUser = async () => {
+    const res = await fetch("/api/auth/me");
     if (res.status === 401) { setSessionExpired(true); return; }
-    if (!res.ok) { setError("No se pudieron cargar los proyectos."); setLoadingProjects(false); return; }
-    const data = await res.json(); setProjects(data.projects || []); setLoadingProjects(false);
-  };
-  const fetchIssues = async (pk: string) => {
-    setLoadingIssues(true);
-    const res = await fetch(`/api/jira/issues?project=${pk}`);
-    if (res.status === 401) { setSessionExpired(true); return; }
-    const data = await res.json(); setIssues(data.issues || []); setLoadingIssues(false);
+    if (res.ok) { const data = await res.json(); setUser(data.user); }
   };
 
-  const addEntry = (issue: Issue) => {
-    if (entries.find(e => e.issueKey === issue.key)) return;
-    setEntries([...entries, { issueKey: issue.key, summary: issue.summary, hours: 0, minutes: 0, comment: "", timeRaw: "", timeError: false }]);
-    setError("");
+  const handleSearch = (val: string) => {
+    setQuery(val);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (!val.trim()) { setSearchResults([]); setShowResults(false); return; }
+    searchTimer.current = setTimeout(async () => {
+      setSearching(true);
+      const res = await fetch(`/api/jira/issues?q=${encodeURIComponent(val)}`);
+      if (res.ok) { const data = await res.json(); setSearchResults(data.issues || []); setShowResults(true); }
+      setSearching(false);
+    }, 350);
   };
 
-  const updateEntry = (issueKey: string, field: keyof Entry, value: string | number | boolean) => {
-    setEntries(entries.map(e => e.issueKey === issueKey ? { ...e, [field]: value } : e));
-    setError("");
+  const addIssue = (issue: Issue) => {
+    if (rows.find(r => r.issue.key === issue.key)) { setQuery(""); setShowResults(false); return; }
+    setRows(prev => [...prev, { issue, byDay: {}, byDaySeconds: {} }]);
+    setQuery(""); setShowResults(false);
   };
 
-  const updateEntryTime = (issueKey: string, raw: string) => {
-    const parsed = parseHours(raw);
-    const hours = parsed !== null ? Math.floor(parsed) : 0;
-    const minutes = parsed !== null ? Math.round((parsed - hours) * 60) : 0;
-    setEntries(entries.map(e => e.issueKey === issueKey ? { ...e, timeRaw: raw, hours, minutes, timeError: raw !== "" && (parsed === null || parsed <= 0) } : e));
-    setError("");
+  const removeRow = (key: string) => {
+    setRows(prev => prev.filter(r => r.issue.key !== key));
+    setPendingChanges(true);
   };
 
-  const removeEntry = (issueKey: string) => setEntries(entries.filter(e => e.issueKey !== issueKey));
+  const updateCell = (issueKey: string, date: string, raw: string) => {
+    const seconds = parseHours(raw);
+    setRows(prev => prev.map(r => r.issue.key === issueKey ? {
+      ...r,
+      byDay: { ...r.byDay, [date]: raw },
+      byDaySeconds: { ...r.byDaySeconds, [date]: seconds },
+    } : r));
+    setPendingChanges(true);
+    setSaveSuccess(false);
+  };
+
+  // Totales
+  const dayTotals: Record<string, number> = {};
+  let weekTotal = 0;
+  for (const day of days) {
+    dayTotals[day] = rows.reduce((acc, r) => acc + (r.byDaySeconds[day] || 0), 0);
+    weekTotal += dayTotals[day];
+  }
+
+  const rowTotals: Record<string, number> = {};
+  for (const row of rows) {
+    rowTotals[row.issue.key] = days.reduce((acc, d) => acc + (row.byDaySeconds[d] || 0), 0);
+  }
+
+  const prevWeek = () => { const d = new Date(refDate); d.setDate(d.getDate() - 7); setRefDate(d); };
+  const nextWeek = () => { const d = new Date(refDate); d.setDate(d.getDate() + 7); setRefDate(d); };
+  const goToday = () => setRefDate(new Date());
+
+  // Guardar en Jira
+  const handleSave = async () => {
+    const toSave: { issueKey: string; date: string; seconds: number }[] = [];
+    for (const row of rows) {
+      for (const day of days) {
+        const seconds = row.byDaySeconds[day] || 0;
+        if (seconds > 0) toSave.push({ issueKey: row.issue.key, date: day, seconds });
+      }
+    }
+    if (!toSave.length) return;
+    setSaving(true); setSaveError(""); setSaveSuccess(false);
+    const entries = toSave.map(t => ({
+      issueKey: t.issueKey,
+      hours: Math.floor(t.seconds / 3600),
+      minutes: Math.floor((t.seconds % 3600) / 60),
+      date: t.date,
+      comment: "",
+    }));
+    const res = await fetch("/api/jira/worklog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries }) });
+    if (res.status === 401) { setSessionExpired(true); setSaving(false); return; }
+    const data = await res.json();
+    if (data.errors?.length > 0) {
+      setSaveError(`No se pudieron guardar: ${data.errors.map((e: any) => e.issueKey).join(", ")}`);
+    } else {
+      setSaveSuccess(true); setPendingChanges(false);
+      // Limpiar celdas guardadas
+      setRows(prev => prev.map(r => ({ ...r, byDay: {}, byDaySeconds: {} })));
+    }
+    setSaving(false);
+  };
 
   const handleTimerStop = (seconds: number, ticketKey: string, ticketSummary: string) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const display = hoursToDisplay(hours, minutes);
-    const existing = entries.find(e => e.issueKey === ticketKey);
+    const existing = rows.find(r => r.issue.key === ticketKey);
+    const todaySecs = existing?.byDaySeconds[today] || 0;
+    const newSecs = todaySecs + seconds;
+    const h = Math.floor(newSecs / 3600);
+    const m = Math.floor((newSecs % 3600) / 60);
+    const raw = m === 0 ? `${h}h` : `${h}h${m}m`;
     if (existing) {
-      const newH = existing.hours + hours;
-      const newM = existing.minutes + minutes;
-      setEntries(prev => prev.map(e => e.issueKey === ticketKey ? { ...e, hours: newH, minutes: newM, timeRaw: hoursToDisplay(newH, newM), timeError: false } : e));
+      updateCell(ticketKey, today, raw);
     } else {
-      setEntries(prev => [...prev, { issueKey: ticketKey, summary: ticketSummary, hours, minutes, comment: "", timeRaw: display, timeError: false }]);
+      // necesitamos el issue — buscarlo
+      fetch(`/api/jira/issues?q=${encodeURIComponent(ticketKey)}`).then(r => r.json()).then(data => {
+        const issue = data.issues?.[0];
+        if (issue) {
+          setRows(prev => [...prev, { issue, byDay: { [today]: raw }, byDaySeconds: { [today]: newSecs } }]);
+          setPendingChanges(true);
+        }
+      });
     }
     setActiveTimerTicket(null);
   };
 
-  const handleStartTimer = (issue: Issue) => { setActiveTimerTicket({ key: issue.key, summary: issue.summary }); };
+  const weekPct = Math.min((weekTotal / JORNADA_SEMANAL) * 100, 100);
+  const weekRemaining = Math.max(JORNADA_SEMANAL - weekTotal, 0);
+  const isWeekend = (d: string) => { const dow = new Date(d + "T12:00:00").getDay(); return dow === 0 || dow === 6; };
 
-  const newHoras = entries.reduce((acc, e) => acc + e.hours + e.minutes / 60, 0);
-  const totalHoras = alreadyLoggedToday + newHoras;
-  const llegaObjetivo = totalHoras >= JORNADA_HORAS;
-  const superaJornada = totalHoras > JORNADA_HORAS;
-  const filteredIssues = issues.filter(i => i.summary.toLowerCase().includes(issueSearch.toLowerCase()) || i.key.toLowerCase().includes(issueSearch.toLowerCase()));
-  const groups = groupIssues(filteredIssues);
-
-  const handleSubmit = async () => {
-    if (entries.length === 0) return;
-    const validationError = validateEntries(entries);
-    if (validationError) { setError(validationError); return; }
-    setSubmitting(true); setError("");
-    const res = await fetch("/api/jira/worklog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries: entries.map(e => ({ ...e, date })) }) });
-    if (res.status === 401) { setSessionExpired(true); setSubmitting(false); return; }
-    if (!res.ok) { setError("Error al conectar con Jira. Intentá de nuevo."); setSubmitting(false); return; }
-    const data = await res.json();
-    if (data.errors?.length > 0) { setError(`No se pudieron imputar: ${data.errors.map((e: any) => e.issueKey).join(", ")}`); const failedKeys = data.errors.map((e: any) => e.issueKey); setEntries(prev => prev.filter(e => failedKeys.includes(e.issueKey))); }
-    else { setSubmitted(true); setAlreadyLoggedToday(prev => prev + newHoras); }
-    setSubmitting(false);
-  };
-
-  if (submitted) {
+  if (sessionExpired) {
     return (
-      <main style={{ minHeight: '100vh', background: '#ECF0F1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Arial, sans-serif' }}>
-        <div style={{ background: '#fff', borderRadius: 4, padding: 40, maxWidth: 400, width: '100%', textAlign: 'center', boxShadow: '0 8px 32px rgba(0,0,0,0.12)', borderTop: '3px solid #D4AF37' }}>
-          <div style={{ width: 64, height: 64, background: '#ECFDF5', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-            <svg style={{ width: 32, height: 32, color: '#10B981' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-          </div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1C1C1C', margin: '0 0 8px' }}>¡Horas imputadas!</h2>
-          <p style={{ color: '#6B6B6B', margin: '0 0 6px', fontSize: 13 }}>Registraste <strong>{newHoras.toFixed(1)}h</strong> en Jira.</p>
-          {superaJornada && <p style={{ color: '#E30613', fontWeight: 700, fontSize: 13, margin: '0 0 16px' }}>⚠ Superaste las 8h del día</p>}
-          {!superaJornada && llegaObjetivo && <p style={{ color: '#10B981', fontWeight: 700, fontSize: 13, margin: '0 0 16px' }}>✓ Jornada completa</p>}
-          <button onClick={() => { setSubmitted(false); setEntries([]); }} style={{ background: '#E30613', color: '#fff', border: 'none', borderRadius: 3, padding: '11px 28px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-            Imputar más horas
-          </button>
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+        <div style={{ background: '#fff', padding: 32, borderRadius: 4, maxWidth: 360, textAlign: 'center', borderTop: '3px solid #D4AF37' }}>
+          <p style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Sesión expirada</p>
+          <a href="/api/auth/logout" style={{ display: 'block', background: '#E30613', color: '#fff', padding: '10px', borderRadius: 3, textDecoration: 'none', fontWeight: 700 }}>Volver a ingresar</a>
         </div>
-      </main>
+      </div>
     );
   }
 
-  const cardStyle = { background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, boxShadow: '0 1px 0 rgba(28,28,28,0.04), 0 8px 24px -12px rgba(28,28,28,0.25)', padding: 20 };
-
   return (
-    <main style={{ minHeight: '100vh', background: '#ECF0F1', fontFamily: 'Arial, sans-serif' }}>
-      {sessionExpired && <SessionExpiredBanner />}
-      {showOnboarding && <OnboardingModal onDismiss={() => { localStorage.setItem("onboarding-seen", "true"); setShowOnboarding(false); }} />}
-
+    <main style={{ minHeight: '100vh', background: '#ECF0F1', fontFamily: 'Arial, sans-serif', display: 'flex', flexDirection: 'column' }}>
       <AppHeader user={user} activeTab="dashboard" onTimerStop={handleTimerStop} activeTimerTicket={activeTimerTicket} />
 
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '22px' }}>
-        {error && (
-          <div style={{ background: '#FBEEEE', borderLeft: '3px solid #E30613', padding: '10px 14px', fontSize: 12, marginBottom: 16, color: '#8E0000', borderRadius: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>{error}</span>
-            <button onClick={() => setError("")} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8E0000', fontSize: 14 }}>✕</button>
-          </div>
-        )}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '16px 22px', maxWidth: 1560, width: '100%', margin: '0 auto', gap: 12 }}>
 
-        {/* Progreso */}
-        <div style={{ ...cardStyle, marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 32, flexWrap: 'wrap' }}>
-            <div>
-              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6B6B6B', margin: '0 0 6px' }}>Fecha de imputación</p>
-              <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '8px 10px', fontSize: 13, color: '#1C1C1C', background: '#fff', outline: 'none' }} />
-            </div>
-            <div style={{ flex: 1, minWidth: 240 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 8 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6B6B6B' }}>Progreso del día</span>
-                <span style={{ fontSize: 20, fontWeight: 700, color: superaJornada ? '#E30613' : llegaObjetivo ? '#10B981' : '#1C1C1C' }}>{totalHoras.toFixed(1)}h <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 400 }}>/ {JORNADA_HORAS}h</span></span>
-              </div>
-              <div style={{ height: 12, background: '#ECF0F1', borderRadius: 99, overflow: 'hidden', display: 'flex', border: '1px solid #DCDEE0' }}>
-                <div style={{ height: '100%', background: superaJornada ? '#EF4444' : '#10B981', width: `${Math.min((alreadyLoggedToday / JORNADA_HORAS) * 100, 100)}%`, transition: 'width 0.5s' }} />
-                <div style={{ height: '100%', background: '#E30613', width: `${Math.min((newHoras / JORNADA_HORAS) * 100, 100 - (alreadyLoggedToday / JORNADA_HORAS) * 100)}%`, transition: 'width 0.5s' }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-                <div style={{ display: 'flex', gap: 12 }}>
-                  {alreadyLoggedToday > 0 && <span style={{ fontSize: 11, color: '#6B6B6B', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />{alreadyLoggedToday.toFixed(1)}h ya imputadas</span>}
-                  {newHoras > 0 && <span style={{ fontSize: 11, color: '#6B6B6B', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#E30613', display: 'inline-block' }} />{newHoras.toFixed(1)}h nuevas</span>}
-                </div>
-                {superaJornada && <p style={{ fontSize: 11, color: '#E30613', fontWeight: 700, margin: 0 }}>⚠ Superaste las 8h</p>}
-                {!superaJornada && llegaObjetivo && <p style={{ fontSize: 11, color: '#10B981', fontWeight: 700, margin: 0 }}>✓ Jornada completa</p>}
-              </div>
-            </div>
+        {/* Breadcrumb */}
+        <div style={{ fontSize: 11, color: '#9CA3AF', letterSpacing: '0.08em' }}>
+          PASO 1 · <span style={{ color: '#E30613', fontWeight: 700 }}>ELIGE</span> · PASO 2 · <span style={{ color: '#E30613', fontWeight: 700 }}>IMPUTA</span> · PASO 3 · <span style={{ color: '#E30613', fontWeight: 700 }}>GUARDA</span>
+        </div>
+
+        {/* Header de página */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: '#E30613', margin: 0 }}>Registro de horas</h2>
+            <p style={{ fontSize: 12, color: '#6B6B6B', margin: '4px 0 0' }}>Añade las incidencias en las que has trabajado y reparte las horas por día. Nada se envía a Jira hasta que pulsas Guardar.</p>
+          </div>
+          {/* Navegación semana */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={prevWeek} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 12 }}>◀</button>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#1C1C1C', minWidth: 240, textAlign: 'center' }}>{fmtWeekLabel(days)}</span>
+            <button onClick={nextWeek} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 12 }}>▶</button>
+            <button onClick={goToday} style={{ fontSize: 11, fontWeight: 700, border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 10px', background: '#fff', cursor: 'pointer', color: '#1C1C1C' }}>Hoy</button>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-          {/* Panel izquierdo */}
-          <div style={cardStyle}>
-            <div style={{ marginBottom: 14, paddingBottom: 12, borderBottom: '1px solid rgba(212,175,55,0.3)' }}>
-              <h2 style={{ fontSize: 14, fontWeight: 700, color: '#1C1C1C', margin: 0 }}>Buscar tickets</h2>
-              <p style={{ fontSize: 11, color: '#6B6B6B', margin: '3px 0 0' }}>Click en la épica para expandir</p>
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6B6B6B', margin: '0 0 6px' }}>Proyecto</p>
-              {loadingProjects ? <div style={{ fontSize: 12, color: '#6B6B6B' }}>Cargando...</div>
-                : <ProjectSelector projects={projects} value={selectedProject} onChange={setSelectedProject} />}
-            </div>
-            {selectedProject && (
-              <div style={{ marginBottom: 12, position: 'relative' }}>
-                <input type="text" placeholder="Filtrar tickets..." value={issueSearch} onChange={e => setIssueSearch(e.target.value)}
-                  style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '7px 10px', fontSize: 12, outline: 'none' }} />
-              </div>
-            )}
-            <div style={{ maxHeight: 420, overflowY: 'auto' }}>
-              {loadingIssues ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '32px 0', fontSize: 13, color: '#6B6B6B' }}>Cargando tickets...</div>
-                : !selectedProject ? <div style={{ textAlign: 'center', padding: '32px 0' }}><div style={{ fontSize: 28, marginBottom: 8 }}>📁</div><p style={{ fontSize: 13, color: '#9CA3AF', margin: 0 }}>Elegí un proyecto para ver sus tickets</p></div>
-                : filteredIssues.length === 0 ? <p style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: '#9CA3AF' }}>No se encontraron tickets activos</p>
-                : groups.map(group => <EpicGroup key={group.parentKey || "__none__"} group={group} entries={entries} onAdd={addEntry} onStartTimer={handleStartTimer} />)}
-            </div>
+        {/* Buscador global */}
+        <div ref={searchRef} style={{ position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, padding: '8px 12px' }}>
+            <svg style={{ width: 16, height: 16, color: '#9CA3AF', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            <input
+              type="text"
+              value={query}
+              onChange={e => handleSearch(e.target.value)}
+              onFocus={() => query && setShowResults(true)}
+              placeholder="Busca por clave, título o épica y pulsa Enter..."
+              style={{ flex: 1, border: 'none', outline: 'none', fontSize: 13, color: '#1C1C1C', background: 'transparent' }}
+            />
+            {searching && <div style={{ width: 14, height: 14, border: '2px solid #DCDEE0', borderTop: '2px solid #E30613', borderRadius: '50%', flexShrink: 0 }} />}
           </div>
-
-          {/* Panel derecho */}
-          <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ marginBottom: 14, paddingBottom: 12, borderBottom: '1px solid rgba(212,175,55,0.3)' }}>
-              <h2 style={{ fontSize: 14, fontWeight: 700, color: '#1C1C1C', margin: 0 }}>Horas del día</h2>
-              <p style={{ fontSize: 11, color: '#6B6B6B', margin: '3px 0 0' }}>{entries.length === 0 ? 'Ningún ticket seleccionado' : `${entries.length} ticket${entries.length > 1 ? 's' : ''} seleccionado${entries.length > 1 ? 's' : ''}`}</p>
-            </div>
-            {entries.length === 0 ? (
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 0', textAlign: 'center' }}>
-                <div style={{ fontSize: 36, marginBottom: 8 }}>⏱</div>
-                <p style={{ fontSize: 13, fontWeight: 700, color: '#6B6B6B', margin: 0 }}>Sin tickets seleccionados</p>
-                <p style={{ fontSize: 11, color: '#9CA3AF', margin: '4px 0 0' }}>Agregá tickets desde el panel izquierdo</p>
-              </div>
-            ) : (
-              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {entries.map(entry => {
-                  const hasError = entry.timeError || (entry.hours === 0 && entry.minutes === 0 && (entry.timeRaw === undefined || entry.timeRaw === ""));
-                  return (
-                    <div key={entry.issueKey} style={{ padding: 12, borderRadius: 3, border: `1px solid ${hasError ? '#E30613' : 'rgba(212,175,55,0.3)'}`, background: hasError ? '#FBEEEE' : '#FFFDF0' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                        <div style={{ minWidth: 0 }}>
-                          <p style={{ fontSize: 13, fontWeight: 700, color: '#1C1C1C', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>{entry.summary}</p>
-                          <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#E30613' }}>{entry.issueKey}</span>
-                          {entry.timeError && <p style={{ fontSize: 11, color: '#E30613', margin: '2px 0 0' }}>⚠ Formato no válido. Usá: 2h30, 90m, 1:30</p>}
-                        </div>
-                        <button onClick={() => removeEntry(entry.issueKey)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 16, padding: '0 0 0 8px' }}>✕</button>
+          {showResults && searchResults.length > 0 && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30, background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, boxShadow: '0 4px 20px rgba(0,0,0,0.15)', maxHeight: 320, overflowY: 'auto', marginTop: 2 }}>
+              {searchResults.map(issue => {
+                const already = rows.some(r => r.issue.key === issue.key);
+                const ts = ISSUE_TYPE_STYLES[issue.issueType] || { emoji: "📄", color: "#9CA3AF" };
+                return (
+                  <button key={issue.key} onClick={() => addIssue(issue)} disabled={already}
+                    style={{ width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderBottom: '1px solid #F0F0F0', background: already ? '#F9F9F9' : '#fff', cursor: already ? 'default' : 'pointer', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <span style={{ fontSize: 15, flexShrink: 0, marginTop: 1, color: ts.color }}>{ts.emoji}</span>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                        <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: '#E30613' }}>{issue.key}</span>
+                        <span style={{ fontSize: 11, color: '#9CA3AF' }}>{issue.project}</span>
+                        {issue.parentSummary && <span style={{ fontSize: 11, color: '#9CA3AF' }}>· {issue.parentSummary}</span>}
+                        {already && <span style={{ fontSize: 10, color: '#10B981', fontWeight: 700 }}>✓ Ya agregada</span>}
                       </div>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, border: `1px solid ${entry.timeError ? '#E30613' : '#DCDEE0'}`, borderRadius: 3, padding: '5px 8px', background: '#fff', minWidth: 110 }}>
-                          <input
-                            type="text"
-                            value={entry.timeRaw ?? hoursToDisplay(entry.hours, entry.minutes)}
-                            onChange={e => updateEntryTime(entry.issueKey, e.target.value)}
-                            placeholder="2h30, 90m, 1:30"
-                            style={{ width: '100%', fontSize: 13, fontWeight: 700, border: 'none', outline: 'none', background: 'transparent', color: entry.timeError ? '#E30613' : '#1C1C1C' }}
-                          />
-                        </div>
-                        <input type="text" placeholder="Comentario (opcional)" value={entry.comment} onChange={e => updateEntry(entry.issueKey, "comment", e.target.value)}
-                          style={{ flex: 1, border: '1px solid #DCDEE0', borderRadius: 3, padding: '6px 10px', fontSize: 12, outline: 'none', background: '#fff' }} />
-                      </div>
+                      <p style={{ margin: 0, fontSize: 13, color: '#1C1C1C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.summary}</p>
                     </div>
+                    <div style={{ flexShrink: 0 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLORS[issue.status] || '#9CA3AF', display: 'inline-block' }} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {showResults && searchResults.length === 0 && !searching && query && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30, background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, padding: '16px', textAlign: 'center', fontSize: 13, color: '#9CA3AF', marginTop: 2 }}>
+              No se encontraron incidencias para "{query}"
+            </div>
+          )}
+        </div>
+
+        {/* Tabla */}
+        <div style={{ background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, overflow: 'hidden', flex: 1 }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#E30613' }}>
+                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 11, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.08em', minWidth: 320, position: 'sticky', left: 0, background: '#E30613', zIndex: 10 }}>
+                    Incidencia
+                  </th>
+                  {days.map((d, i) => (
+                    <th key={d} style={{ textAlign: 'center', padding: '8px 6px', minWidth: 80, background: d === today ? '#C00000' : '#E30613', borderLeft: '1px solid rgba(255,255,255,0.15)' }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase' }}>{DAY_LABELS[i]}</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{new Date(d + "T12:00:00").getDate()}</div>
+                    </th>
+                  ))}
+                  <th style={{ textAlign: 'center', padding: '8px 12px', minWidth: 80, background: '#C00000', borderLeft: '1px solid rgba(255,255,255,0.15)', fontSize: 11, fontWeight: 700, color: '#fff', textTransform: 'uppercase' }}>
+                    Total
+                  </th>
+                  <th style={{ width: 32, background: '#E30613', borderLeft: '1px solid rgba(255,255,255,0.15)' }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={days.length + 3} style={{ textAlign: 'center', padding: '48px 16px', color: '#9CA3AF' }}>
+                      <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Buscá una incidencia arriba para empezar</p>
+                      <p style={{ margin: '4px 0 0', fontSize: 12 }}>Podés buscar por clave (ej: JO-123), título o épica</p>
+                    </td>
+                  </tr>
+                ) : rows.map((row, ri) => {
+                  const ts = ISSUE_TYPE_STYLES[row.issue.issueType] || { emoji: "📄", color: "#9CA3AF" };
+                  const rowTotal = rowTotals[row.issue.key] || 0;
+                  return (
+                    <tr key={row.issue.key} style={{ borderBottom: '1px solid #F0F0F0', background: ri % 2 === 0 ? '#fff' : '#FAFAFA' }}>
+                      <td style={{ padding: '10px 16px', position: 'sticky', left: 0, background: ri % 2 === 0 ? '#fff' : '#FAFAFA', zIndex: 5, borderRight: '1px solid #F0F0F0' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                          <span style={{ fontSize: 15, marginTop: 2, color: ts.color, flexShrink: 0 }}>{ts.emoji}</span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: '#E30613' }}>{row.issue.key}</span>
+                              <span style={{ fontSize: 11, color: '#9CA3AF' }}>{row.issue.issueType}</span>
+                            </div>
+                            <p style={{ margin: 0, fontSize: 13, color: '#1C1C1C', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{row.issue.summary}</p>
+                            <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                              {row.issue.parentSummary && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 99, background: '#F3F4F6', color: '#6B6B6B', border: '1px solid #DCDEE0' }}>⚡ {row.issue.parentSummary}</span>}
+                              <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 99, background: '#F3F4F6', color: '#6B6B6B', border: '1px solid #DCDEE0' }}>{row.issue.project}</span>
+                              <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 99, background: '#F3F4F6', color: STATUS_COLORS[row.issue.status] || '#6B6B6B', border: '1px solid #DCDEE0', fontWeight: 700 }}>{row.issue.status}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      {days.map(d => {
+                        const raw = row.byDay[d] ?? "";
+                        const secs = row.byDaySeconds[d] || 0;
+                        const we = isWeekend(d);
+                        const isToday = d === today;
+                        return (
+                          <td key={d} style={{ padding: '6px 4px', textAlign: 'center', borderLeft: '1px solid #F0F0F0', background: we ? '#F5F5F5' : isToday ? '#FFF9F0' : 'transparent', position: 'relative' }}>
+                            {we ? (
+                              <span style={{ color: '#DCDEE0', fontSize: 12 }}>—</span>
+                            ) : (
+                              <input
+                                type="text"
+                                value={raw}
+                                onChange={e => updateCell(row.issue.key, d, e.target.value)}
+                                onFocus={e => { if (e.target.value === "0:00") e.target.value = ""; }}
+                                onBlur={e => {
+                                  const val = e.target.value.trim();
+                                  if (!val) return;
+                                  const s = parseHours(val);
+                                  updateCell(row.issue.key, d, s > 0 ? fmtSecondsShort(s) : "");
+                                }}
+                                placeholder="0:00"
+                                style={{
+                                  width: '100%', textAlign: 'center', border: secs > 0 ? '1px solid rgba(212,175,55,0.5)' : '1px solid transparent',
+                                  borderRadius: 3, padding: '5px 4px', fontSize: 13, fontWeight: secs > 0 ? 700 : 400,
+                                  color: secs > 0 ? '#1C1C1C' : '#DCDEE0', background: secs > 0 ? '#FFFDF0' : 'transparent',
+                                  outline: 'none', cursor: 'text',
+                                }}
+                                onMouseOver={e => { if (!secs) e.currentTarget.style.borderColor = '#DCDEE0'; }}
+                                onMouseOut={e => { if (!secs) e.currentTarget.style.borderColor = 'transparent'; }}
+                              />
+                            )}
+                            {secs > 0 && !we && (
+                              <div style={{ position: 'absolute', top: 2, right: 3, width: 5, height: 5, borderRadius: '50%', background: '#E30613' }} />
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td style={{ textAlign: 'center', padding: '6px 8px', borderLeft: '1px solid #F0F0F0', fontWeight: 700, fontSize: 13, color: rowTotal > 0 ? '#1C1C1C' : '#DCDEE0' }}>
+                        {rowTotal > 0 ? fmtSecondsShort(rowTotal) : "—"}
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '6px 4px', borderLeft: '1px solid #F0F0F0' }}>
+                        <button onClick={() => removeRow(row.issue.key)} title="Quitar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DCDEE0', fontSize: 16 }}
+                          onMouseOver={e => e.currentTarget.style.color = '#E30613'} onMouseOut={e => e.currentTarget.style.color = '#DCDEE0'}>✕</button>
+                      </td>
+                    </tr>
                   );
                 })}
-              </div>
-            )}
-            {entries.length > 0 && (
-              <button onClick={handleSubmit} disabled={submitting || newHoras === 0 || entries.some(e => e.timeError)}
-                style={{ marginTop: 14, width: '100%', background: (newHoras === 0 || entries.some(e => e.timeError)) ? '#ECF0F1' : '#E30613', color: (newHoras === 0 || entries.some(e => e.timeError)) ? '#9CA3AF' : '#fff', border: 'none', borderRadius: 3, padding: '12px', fontSize: 14, fontWeight: 700, cursor: (newHoras === 0 || entries.some(e => e.timeError)) ? 'not-allowed' : 'pointer' }}>
-                {submitting ? 'Imputando...' : `Imputar ${newHoras.toFixed(1)}h en Jira →`}
-              </button>
-            )}
+              </tbody>
+              {rows.length > 0 && (
+                <tfoot>
+                  <tr style={{ background: '#1C1C1C', borderTop: '2px solid rgba(212,175,55,0.4)' }}>
+                    <td style={{ padding: '8px 16px', position: 'sticky', left: 0, background: '#1C1C1C', zIndex: 5, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      Total semana
+                    </td>
+                    {days.map(d => {
+                      const s = dayTotals[d] || 0;
+                      const isOver = s > 8 * 3600;
+                      const isFull = s >= 8 * 3600;
+                      const we = isWeekend(d);
+                      return (
+                        <td key={d} style={{ textAlign: 'center', padding: '8px 4px', borderLeft: '1px solid rgba(255,255,255,0.08)', opacity: we ? 0.3 : 1 }}>
+                          {s > 0 ? <span style={{ fontSize: 13, fontWeight: 700, color: isOver ? '#EF4444' : isFull ? '#10B981' : '#F59E0B' }}>{isOver ? '⚠ ' : ''}{fmtSecondsShort(s)}</span>
+                            : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>—</span>}
+                        </td>
+                      );
+                    })}
+                    <td style={{ textAlign: 'center', padding: '8px', borderLeft: '1px solid rgba(255,255,255,0.08)' }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: weekTotal >= JORNADA_SEMANAL ? '#10B981' : '#fff' }}>{fmtSecondsShort(weekTotal)}</span>
+                    </td>
+                    <td style={{ borderLeft: '1px solid rgba(255,255,255,0.08)' }}></td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
           </div>
         </div>
 
-        <CalendarView onTodayHours={setAlreadyLoggedToday} />
+        {/* Footer con progreso y acciones */}
+        <div style={{ background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          {/* Progreso semanal */}
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5 }}>
+              <span style={{ fontSize: 12, color: '#6B6B6B' }}>Semana:</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#1C1C1C' }}>{fmtSeconds(weekTotal)}</span>
+              <span style={{ fontSize: 12, color: '#9CA3AF' }}>de {fmtSeconds(JORNADA_SEMANAL)}</span>
+              {weekRemaining > 0 && <span style={{ fontSize: 12, color: '#E30613' }}>· faltan {fmtSeconds(weekRemaining)}</span>}
+              {weekRemaining === 0 && <span style={{ fontSize: 12, color: '#10B981', fontWeight: 700 }}>· ✓ Semana completa</span>}
+            </div>
+            <div style={{ height: 6, background: '#ECF0F1', borderRadius: 99, overflow: 'hidden' }}>
+              <div style={{ height: '100%', background: weekTotal >= JORNADA_SEMANAL ? '#10B981' : '#E30613', width: `${weekPct}%`, transition: 'width 0.3s', borderRadius: 99 }} />
+            </div>
+          </div>
+
+          {/* Acciones */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {saveError && <span style={{ fontSize: 12, color: '#E30613' }}>{saveError}</span>}
+            {saveSuccess && <span style={{ fontSize: 12, color: '#10B981', fontWeight: 700 }}>✓ Guardado en Jira</span>}
+            {pendingChanges && !saveSuccess && <span style={{ fontSize: 12, color: '#F59E0B' }}>Con cambios pendientes</span>}
+            {!pendingChanges && !saveSuccess && rows.length > 0 && <span style={{ fontSize: 12, color: '#9CA3AF' }}>Sin cambios pendientes</span>}
+            <button
+              onClick={handleSave}
+              disabled={saving || !pendingChanges || rows.length === 0}
+              style={{ background: (!pendingChanges || rows.length === 0) ? '#ECF0F1' : '#E30613', color: (!pendingChanges || rows.length === 0) ? '#9CA3AF' : '#fff', border: 'none', borderRadius: 3, padding: '8px 20px', fontSize: 13, fontWeight: 700, cursor: (!pendingChanges || rows.length === 0) ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+              {saving ? 'Guardando...' : 'Guardar en Jira'}
+            </button>
+          </div>
+        </div>
       </div>
     </main>
   );
