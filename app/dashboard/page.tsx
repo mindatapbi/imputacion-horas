@@ -411,16 +411,17 @@ export default function Dashboard() {
     <option value="">Épica ▾</option>
     {[...new Set(rows.map(r => r.issue.parentSummary).filter(Boolean))].sort().map(ep => <option key={ep} value={ep!}>{ep}</option>)}
   </select>
-  <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-    style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterStatus ? '#E30613' : '#6B6B6B', fontWeight: filterStatus ? 700 : 400 }}>
-    <option value="">Estado ▾</option>
-    {[...new Set(rows.map(r => r.issue.status).filter(Boolean))].sort().map(s => <option key={s} value={s}>{s}</option>)}
-  </select>
   <select value={filterIssue} onChange={e => setFilterIssue(e.target.value)}
     style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterIssue ? '#E30613' : '#6B6B6B', fontWeight: filterIssue ? 700 : 400 }}>
     <option value="">Tarea ▾</option>
     {rows.filter((r, i, a) => a.findIndex(x => x.issue.key === r.issue.key) === i).sort((a, b) => a.issue.key.localeCompare(b.issue.key)).map(r => <option key={r.issue.key} value={r.issue.key}>{r.issue.key} · {r.issue.summary}</option>)}
   </select>
+  <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+    style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterStatus ? '#E30613' : '#6B6B6B', fontWeight: filterStatus ? 700 : 400 }}>
+    <option value="">Estado ▾</option>
+    {[...new Set(rows.map(r => r.issue.status).filter(Boolean))].sort().map(s => <option key={s} value={s}>{s}</option>)}
+  </select>
+  
   <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#6B6B6B', cursor: 'pointer' }}>
     <input type="checkbox" checked={soloMias} onChange={e => setSoloMias(e.target.checked)}
       style={{ accentColor: '#E30613', width: 14, height: 14 }} />
