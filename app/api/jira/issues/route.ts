@@ -13,8 +13,31 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const projectKey = searchParams.get("project");
+  const query = searchParams.get("q");
 
   try {
+    // ── BÚSQUEDA GLOBAL POR TEXTO ──────────────────────────────────────────
+    if (query) {
+      const jql = encodeURIComponent(
+        `assignee = currentUser() AND statusCategory != Done AND (summary ~ "${query}" OR key = "${query}") ORDER BY updated DESC`
+      );
+      const url = `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,status,project,issuetype,parent&maxResults=20`;
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
+      const data = await response.json();
+      const issues = data.issues?.map((issue: any) => ({
+        key: issue.key,
+        summary: issue.fields.summary,
+        status: issue.fields.status?.name,
+        project: issue.fields.project?.name,
+        projectKey: issue.fields.project?.key,
+        issueType: issue.fields.issuetype?.name || "Task",
+        parentKey: issue.fields.parent?.key || null,
+        parentSummary: issue.fields.parent?.fields?.summary || null,
+      })) || [];
+      return NextResponse.json({ issues });
+    }
+
+    // ── LISTAR PROYECTOS ───────────────────────────────────────────────────
     if (!projectKey) {
       const response = await fetch(
         `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/project/search?maxResults=100&orderBy=name&action=browse`,
@@ -25,6 +48,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ projects });
     }
 
+    // ── TICKETS POR PROYECTO ───────────────────────────────────────────────
     const jql = encodeURIComponent(`project = "${projectKey}" AND statusCategory != Done ORDER BY issuetype ASC, updated DESC`);
     const url = `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,status,project,issuetype,parent&maxResults=100`;
     const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
@@ -34,11 +58,13 @@ export async function GET(request: NextRequest) {
       summary: issue.fields.summary,
       status: issue.fields.status?.name,
       project: issue.fields.project?.name,
+      projectKey: issue.fields.project?.key,
       issueType: issue.fields.issuetype?.name || "Task",
       parentKey: issue.fields.parent?.key || null,
       parentSummary: issue.fields.parent?.fields?.summary || null,
     })) || [];
     return NextResponse.json({ issues });
+
   } catch (error) {
     return NextResponse.json({ error: "Error al obtener datos" }, { status: 500 });
   }
