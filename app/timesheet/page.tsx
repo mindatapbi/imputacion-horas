@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import * as XLSX from "xlsx";
+import AppHeader from "@/components/AppHeader";
 
 interface Entry {
   worklogId: string; issueKey: string; issueSummary: string; issueType: string;
@@ -20,34 +21,27 @@ interface IssueGroup { parentKey: string | null; parentSummary: string | null; i
 
 const JORNADA_HORAS = 8;
 const ISSUE_TYPE_STYLES: Record<string, { emoji: string; color: string }> = {
-  "Epic": { emoji: "⚡", color: "text-purple-500" }, "Story": { emoji: "📗", color: "text-green-500" },
-  "Task": { emoji: "✅", color: "text-blue-500" }, "Sub-task": { emoji: "↳", color: "text-gray-400" }, "Bug": { emoji: "🐛", color: "text-red-500" },
+  "Epic": { emoji: "⚡", color: "#7C3AED" }, "Story": { emoji: "📗", color: "#059669" },
+  "Task": { emoji: "✅", color: "#2563EB" }, "Sub-task": { emoji: "↳", color: "#9CA3AF" }, "Bug": { emoji: "🐛", color: "#DC2626" },
 };
 
 function fmtTime(s: number) { if (!s) return ""; const h = Math.floor(s/3600), m = Math.floor((s%3600)/60); return m ? (h ? `${h}h ${m}m` : `${m}m`) : `${h}h`; }
 function fmtDate(d: string) { return new Date(d+"T12:00:00").toLocaleDateString("es-AR",{weekday:"short",day:"numeric",month:"short"}); }
 function getDays(from: string, to: string) { const days: string[]=[]; const c=new Date(from+"T12:00:00"), e=new Date(to+"T12:00:00"); while(c<=e){days.push(c.toISOString().split("T")[0]);c.setDate(c.getDate()+1);} return days; }
-
 function groupIssuesForPanel(issues: Issue[]): IssueGroup[] {
   const g: Record<string,IssueGroup>={};
   for(const i of issues){const k=i.parentKey||"__none__";if(!g[k])g[k]={parentKey:i.parentKey,parentSummary:i.parentSummary,issues:[]};g[k].issues.push(i);}
   return Object.values(g).sort((a,b)=>a.parentKey===null?1:b.parentKey===null?-1:(a.parentKey||"").localeCompare(b.parentKey||""));
 }
-
 function buildEpicGroups(entries: Entry[]): EpicGroup[] {
   const epicMap: Record<string, EpicGroup> = {};
   for (const entry of entries) {
     const epicKey = entry.parentKey || "__none__";
-    if (!epicMap[epicKey]) {
-      epicMap[epicKey] = { parentKey: entry.parentKey, parentSummary: entry.parentSummary, issues: [], totalSeconds: 0 };
-    }
+    if (!epicMap[epicKey]) epicMap[epicKey] = { parentKey: entry.parentKey, parentSummary: entry.parentSummary, issues: [], totalSeconds: 0 };
     const epic = epicMap[epicKey];
     epic.totalSeconds += entry.timeSpentSeconds;
     let issueRow = epic.issues.find(i => i.issueKey === entry.issueKey);
-    if (!issueRow) {
-      issueRow = { issueKey: entry.issueKey, issueSummary: entry.issueSummary, issueType: entry.issueType, project: entry.project, totalSeconds: 0, byDate: {} };
-      epic.issues.push(issueRow);
-    }
+    if (!issueRow) { issueRow = { issueKey: entry.issueKey, issueSummary: entry.issueSummary, issueType: entry.issueType, project: entry.project, totalSeconds: 0, byDate: {} }; epic.issues.push(issueRow); }
     if (!issueRow.byDate[entry.date]) issueRow.byDate[entry.date] = [];
     issueRow.byDate[entry.date].push(entry);
     issueRow.totalSeconds += entry.timeSpentSeconds;
@@ -61,14 +55,14 @@ function ProjectSelector({ projects, value, onChange }: { projects: Project[]; v
   const filtered = projects.filter(p=>p.name.toLowerCase().includes(search.toLowerCase())||p.key.toLowerCase().includes(search.toLowerCase()));
   useEffect(()=>{const h=(e:MouseEvent)=>{if(ref.current&&!ref.current.contains(e.target as Node))setOpen(false)};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[]);
   return (
-    <div ref={ref} className="relative">
-      <button onClick={()=>setOpen(!open)} className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-xs text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-red-500 bg-white">
-        {selected?<span className="text-gray-900 truncate">{selected.name} <span className="text-red-600 font-mono font-semibold">({selected.key})</span></span>:<span className="text-gray-400">— Elegí un proyecto —</span>}
-        <svg className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ml-1 ${open?"rotate-180":""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
+    <div ref={ref} style={{position:'relative'}}>
+      <button onClick={()=>setOpen(!open)} style={{width:'100%',border:'1px solid #DCDEE0',borderRadius:3,padding:'6px 10px',fontSize:12,textAlign:'left',display:'flex',alignItems:'center',justifyContent:'space-between',background:'#fff',cursor:'pointer'}}>
+        {selected?<span style={{color:'#1C1C1C',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selected.name} <span style={{color:'#E30613',fontFamily:'monospace',fontWeight:700}}>({selected.key})</span></span>:<span style={{color:'#9CA3AF'}}>— Elegí un proyecto —</span>}
+        <span style={{color:'#9CA3AF',fontSize:10,flexShrink:0,marginLeft:4}}>{open?'▲':'▼'}</span>
       </button>
-      {open&&<div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
-        <div className="p-2 border-b border-gray-100"><div className="relative"><svg className="w-3 h-3 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg><input autoFocus type="text" placeholder="Buscar..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full pl-6 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"/></div></div>
-        <div className="max-h-48 overflow-y-auto">{filtered.length===0?<p className="text-xs text-gray-400 text-center py-3">Sin resultados</p>:filtered.map(p=><button key={p.key} onClick={()=>{onChange(p.key);setOpen(false);setSearch("");}} className={`w-full text-left px-2.5 py-2 text-xs hover:bg-red-50 transition-colors flex items-center justify-between ${value===p.key?"bg-red-50":""}`}><span className="text-gray-900 truncate">{p.name}</span><span className="text-red-600 font-mono text-xs font-semibold ml-1 flex-shrink-0">{p.key}</span></button>)}</div>
+      {open&&<div style={{position:'absolute',zIndex:20,width:'100%',marginTop:2,background:'#fff',border:'1px solid #DCDEE0',borderRadius:3,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',overflow:'hidden'}}>
+        <div style={{padding:6,borderBottom:'1px solid #DCDEE0'}}><input autoFocus type="text" placeholder="Buscar..." value={search} onChange={e=>setSearch(e.target.value)} style={{width:'100%',border:'1px solid #DCDEE0',borderRadius:3,padding:'5px 8px',fontSize:11,outline:'none'}}/></div>
+        <div style={{maxHeight:180,overflowY:'auto'}}>{filtered.length===0?<p style={{padding:'10px',fontSize:11,color:'#9CA3AF',textAlign:'center',margin:0}}>Sin resultados</p>:filtered.map(p=><button key={p.key} onClick={()=>{onChange(p.key);setOpen(false);setSearch("");}} style={{width:'100%',textAlign:'left',padding:'7px 10px',fontSize:11,background:value===p.key?'#FBEEEE':'transparent',border:'none',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{color:'#1C1C1C',overflow:'hidden',textOverflow:'ellipsis'}}>{p.name}</span><span style={{color:'#E30613',fontFamily:'monospace',fontSize:10,fontWeight:700,flexShrink:0,marginLeft:4}}>{p.key}</span></button>)}</div>
       </div>}
     </div>
   );
@@ -78,23 +72,20 @@ function PanelEpicGroup({ group, onAdd }: { group: IssueGroup; onAdd: (i: Issue)
   const [collapsed, setCollapsed] = useState(true);
   const isEpic = !!group.parentKey;
   return (
-    <div className="mb-1.5">
-      <button onClick={()=>setCollapsed(!collapsed)} className={`w-full flex items-center gap-1.5 px-1.5 py-1 rounded-lg transition-colors text-left ${isEpic?"hover:bg-red-50":"hover:bg-gray-50"}`}>
-        <svg className={`w-3 h-3 flex-shrink-0 transition-transform ${collapsed?"-rotate-90":""} ${isEpic?"text-red-400":"text-gray-300"}`} fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
-        {isEpic?<><span className="text-purple-500 text-xs">⚡</span><span className="text-xs font-semibold text-gray-700 truncate flex-1">{group.parentSummary}</span><span className="text-xs text-red-500 font-mono flex-shrink-0">{group.parentKey}</span></>:<span className="text-xs font-semibold text-gray-400 flex-1">Sin épica</span>}
-        <span className={`text-xs px-1 py-0.5 rounded-full flex-shrink-0 ${isEpic?"bg-red-100 text-red-600":"bg-gray-100 text-gray-500"}`}>{group.issues.length}</span>
+    <div style={{marginBottom:6}}>
+      <button onClick={()=>setCollapsed(!collapsed)} style={{width:'100%',display:'flex',alignItems:'center',gap:6,padding:'5px 6px',borderRadius:3,background:isEpic?'#FBEEEE':'#F9FAFB',border:`1px solid ${isEpic?'rgba(212,175,55,0.3)':'#DCDEE0'}`,cursor:'pointer',textAlign:'left'}}>
+        <span style={{fontSize:10,color:'#9CA3AF',transform:collapsed?'rotate(-90deg)':'none',display:'inline-block',transition:'transform 0.12s'}}>▼</span>
+        {isEpic?<><span style={{fontSize:11}}>⚡</span><span style={{fontSize:11,fontWeight:700,color:'#1C1C1C',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{group.parentSummary}</span><span style={{fontSize:10,color:'#E30613',fontFamily:'monospace',fontWeight:700,flexShrink:0}}>{group.parentKey}</span></>:<span style={{fontSize:11,fontWeight:700,color:'#9CA3AF',flex:1}}>Sin épica</span>}
+        <span style={{fontSize:10,padding:'1px 5px',borderRadius:99,background:isEpic?'#FBEEEE':'#F3F4F6',color:isEpic?'#E30613':'#6B6B6B',flexShrink:0}}>{group.issues.length}</span>
       </button>
-      {!collapsed&&<div className="ml-2 mt-0.5 relative"><div className={`absolute left-0 top-0 bottom-1 w-px ${isEpic?"bg-red-200":"bg-gray-200"}`}/><div className="space-y-1 pl-3">
+      {!collapsed&&<div style={{marginLeft:8,marginTop:3,paddingLeft:10,borderLeft:`2px solid ${isEpic?'rgba(212,175,55,0.4)':'#DCDEE0'}`}}>
         {group.issues.map(issue=>(
-          <div key={issue.key} className="relative">
-            <div className={`absolute -left-3 top-1/2 w-2.5 h-px ${isEpic?"bg-red-200":"bg-gray-200"}`}/>
-            <div className="flex items-center justify-between p-2 rounded-lg border border-gray-100 hover:border-red-200 hover:bg-red-50/30 transition-all">
-              <div className="min-w-0 flex-1 mr-2"><p className="text-xs font-medium text-gray-900 truncate">{issue.summary}</p><span className="text-xs font-mono font-semibold text-red-500">{issue.key}</span></div>
-              <button onClick={()=>onAdd(issue)} className="flex-shrink-0 text-xs font-medium px-2 py-1 rounded-lg text-red-600 hover:bg-red-100 border border-red-200 transition-all whitespace-nowrap">+ Agregar</button>
-            </div>
+          <div key={issue.key} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 8px',marginBottom:3,borderRadius:3,border:'1px solid #DCDEE0',background:'#fff',gap:8}}>
+            <div style={{minWidth:0,flex:1}}><p style={{margin:0,fontSize:11,fontWeight:600,color:'#1C1C1C',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{issue.summary}</p><span style={{fontSize:10,fontFamily:'monospace',fontWeight:700,color:'#E30613'}}>{issue.key}</span></div>
+            <button onClick={()=>onAdd(issue)} style={{flexShrink:0,fontSize:10,border:'1px solid #DCDEE0',borderRadius:3,padding:'2px 7px',background:'#fff',color:'#E30613',cursor:'pointer',fontWeight:700,whiteSpace:'nowrap'}}>+ Agregar</button>
           </div>
         ))}
-      </div></div>}
+      </div>}
     </div>
   );
 }
@@ -127,25 +118,27 @@ function EntryModal({ title, issueKey, issueSummary, date, initialHours=0, initi
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border-t-4 border-red-600">
-        <div className="flex items-start justify-between mb-4">
-          <div><h3 className="font-bold text-gray-900">{title}</h3><p className="text-xs text-red-500 font-mono font-semibold mt-0.5">{issueKey} · {fmtDate(date)}</p><p className="text-sm text-gray-600 mt-0.5 truncate max-w-xs">{issueSummary}</p></div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg></button>
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50,padding:16}}>
+      <div style={{background:'#fff',borderRadius:4,boxShadow:'0 8px 32px rgba(0,0,0,0.2)',width:'100%',maxWidth:420,padding:24,borderTop:'3px solid #D4AF37'}}>
+        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:16}}>
+          <div><h3 style={{fontSize:15,fontWeight:700,color:'#1C1C1C',margin:0}}>{title}</h3><p style={{fontSize:11,color:'#E30613',fontFamily:'monospace',fontWeight:700,margin:'3px 0 0'}}>{issueKey} · {fmtDate(date)}</p><p style={{fontSize:12,color:'#6B6B6B',margin:'2px 0 0',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:300}}>{issueSummary}</p></div>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:'#9CA3AF',fontSize:18,padding:'0 0 0 12px'}}>✕</button>
         </div>
-        <div className="space-y-4">
-          <div><label className="text-xs font-semibold text-gray-400 uppercase tracking-wide block mb-2">Tiempo</label>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1 border border-gray-200 rounded-xl px-3 py-2.5 bg-gray-50"><input autoFocus type="number" min={0} max={24} value={hours} onChange={e=>setHours(parseInt(e.target.value)||0)} className="w-12 text-center text-lg font-bold text-gray-900 focus:outline-none bg-transparent"/><span className="text-sm text-gray-400 font-medium">h</span></div>
-              <div className="flex items-center gap-1 border border-gray-200 rounded-xl px-3 py-2.5 bg-gray-50"><input type="number" min={0} max={59} step={15} value={minutes} onChange={e=>setMinutes(parseInt(e.target.value)||0)} className="w-12 text-center text-lg font-bold text-gray-900 focus:outline-none bg-transparent"/><span className="text-sm text-gray-400 font-medium">min</span></div>
-            </div>
+        <div style={{marginBottom:14}}>
+          <p style={{fontSize:10,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:'#6B6B6B',margin:'0 0 8px'}}>Tiempo</p>
+          <div style={{display:'flex',gap:10,alignItems:'center'}}>
+            <div style={{display:'flex',alignItems:'center',gap:4,border:'1px solid #DCDEE0',borderRadius:3,padding:'8px 12px',background:'#F9FAFB'}}><input autoFocus type="number" min={0} max={24} value={hours} onChange={e=>setHours(parseInt(e.target.value)||0)} style={{width:40,textAlign:'center',fontSize:16,fontWeight:700,border:'none',outline:'none',background:'transparent'}}/><span style={{fontSize:12,color:'#9CA3AF'}}>h</span></div>
+            <div style={{display:'flex',alignItems:'center',gap:4,border:'1px solid #DCDEE0',borderRadius:3,padding:'8px 12px',background:'#F9FAFB'}}><input type="number" min={0} max={59} step={15} value={minutes} onChange={e=>setMinutes(parseInt(e.target.value)||0)} style={{width:40,textAlign:'center',fontSize:16,fontWeight:700,border:'none',outline:'none',background:'transparent'}}/><span style={{fontSize:12,color:'#9CA3AF'}}>min</span></div>
           </div>
-          <div><label className="text-xs font-semibold text-gray-400 uppercase tracking-wide block mb-2">Comentario</label><textarea value={comment} onChange={e=>setComment(e.target.value)} rows={3} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 resize-none" placeholder="Comentario (opcional)"/></div>
         </div>
-        {error&&<p className="text-sm text-red-500 mt-3">{error}</p>}
-        <div className="flex gap-3 mt-5">
-          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-600 font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors text-sm">Cancelar</button>
-          <button onClick={handleSave} disabled={saving} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm disabled:opacity-50">{saving?"Guardando...":worklogId?"Guardar cambios":"Registrar horas"}</button>
+        <div style={{marginBottom:14}}>
+          <p style={{fontSize:10,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:'#6B6B6B',margin:'0 0 8px'}}>Comentario</p>
+          <textarea value={comment} onChange={e=>setComment(e.target.value)} rows={3} style={{width:'100%',border:'1px solid #DCDEE0',borderRadius:3,padding:'8px 10px',fontSize:12,outline:'none',resize:'none'}} placeholder="Comentario (opcional)"/>
+        </div>
+        {error&&<p style={{fontSize:12,color:'#E30613',margin:'0 0 12px'}}>{error}</p>}
+        <div style={{display:'flex',gap:10}}>
+          <button onClick={onClose} style={{flex:1,border:'1px solid #DCDEE0',borderRadius:3,padding:'10px',fontSize:13,fontWeight:700,background:'#fff',cursor:'pointer',color:'#333'}}>Cancelar</button>
+          <button onClick={handleSave} disabled={saving} style={{flex:1,background:'#E30613',color:'#fff',border:'none',borderRadius:3,padding:'10px',fontSize:13,fontWeight:700,cursor:'pointer',opacity:saving?0.7:1}}>{saving?'Guardando...':worklogId?'Guardar cambios':'Registrar horas'}</button>
         </div>
       </div>
     </div>
@@ -184,44 +177,21 @@ export default function TimesheetPage() {
   const fetchUser=async()=>{const r=await fetch("/api/auth/me");if(r.ok){const d=await r.json();setUser(d.user);}};
   const fetchProjects=async()=>{setLoadingProjects(true);const r=await fetch("/api/jira/issues");if(r.ok){const d=await r.json();setProjects(d.projects||[]);}setLoadingProjects(false);};
   const fetchIssues=async(pk:string)=>{setLoadingIssues(true);const r=await fetch(`/api/jira/issues?project=${pk}`);if(r.ok){const d=await r.json();setIssues(d.issues||[]);}setLoadingIssues(false);};
-  const fetchTimesheet=async()=>{
-    setLoading(true);setError("");
-    const r=await fetch(`/api/jira/timesheet?from=${from}&to=${to}`);
-    if(r.status===401){window.location.href="/";return;}
-    if(r.ok){const d=await r.json();setEntries(d.entries||[]);}
-    else setError("Error al cargar el timesheet.");
-    setLoading(false);
-  };
+  const fetchTimesheet=async()=>{setLoading(true);setError("");const r=await fetch(`/api/jira/timesheet?from=${from}&to=${to}`);if(r.status===401){window.location.href="/";return;}if(r.ok){const d=await r.json();setEntries(d.entries||[]);}else setError("Error al cargar el timesheet.");setLoading(false);};
   const handleSaveEdit=(updated:Entry)=>{setEntries(prev=>prev.map(e=>e.worklogId===updated.worklogId?updated:e));setEditingEntry(null);};
   const handleSaveNew=(_:Entry)=>{setNewEntry(null);fetchTimesheet();};
-  const handleDelete=async(entry:Entry)=>{
-    if(!confirm(`¿Eliminar ${fmtTime(entry.timeSpentSeconds)} de ${entry.issueKey}?`))return;
-    setDeletingId(entry.worklogId);
-    const r=await fetch("/api/jira/timesheet",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({issueKey:entry.issueKey,worklogId:entry.worklogId})});
-    if(r.ok)setEntries(prev=>prev.filter(e=>e.worklogId!==entry.worklogId));
-    else setError("No se pudo eliminar.");
-    setDeletingId(null);
-  };
-
-  const toggleEpic = (key: string) => setCollapsedEpics(prev => ({ ...prev, [key]: !prev[key] }));
+  const handleDelete=async(entry:Entry)=>{if(!confirm(`¿Eliminar ${fmtTime(entry.timeSpentSeconds)} de ${entry.issueKey}?`))return;setDeletingId(entry.worklogId);const r=await fetch("/api/jira/timesheet",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({issueKey:entry.issueKey,worklogId:entry.worklogId})});if(r.ok)setEntries(prev=>prev.filter(e=>e.worklogId!==entry.worklogId));else setError("No se pudo eliminar.");setDeletingId(null);};
+  const toggleEpic=(key:string)=>setCollapsedEpics(prev=>({...prev,[key]:!prev[key]}));
 
   const exportToExcel=()=>{
     if(!entries.length)return;
     const days=getDays(from,to);
     const rowMap:Record<string,{key:string;summary:string;project:string;epic:string;totalSeconds:number;byDate:Record<string,number>}>={};
-    for(const e of entries){
-      if(!rowMap[e.issueKey])rowMap[e.issueKey]={key:e.issueKey,summary:e.issueSummary,project:e.project,epic:e.parentSummary||"Sin épica",totalSeconds:0,byDate:{}};
-      rowMap[e.issueKey].byDate[e.date]=(rowMap[e.issueKey].byDate[e.date]||0)+e.timeSpentSeconds;
-      rowMap[e.issueKey].totalSeconds+=e.timeSpentSeconds;
-    }
+    for(const e of entries){if(!rowMap[e.issueKey])rowMap[e.issueKey]={key:e.issueKey,summary:e.issueSummary,project:e.project,epic:e.parentSummary||"Sin épica",totalSeconds:0,byDate:{}};rowMap[e.issueKey].byDate[e.date]=(rowMap[e.issueKey].byDate[e.date]||0)+e.timeSpentSeconds;rowMap[e.issueKey].totalSeconds+=e.timeSpentSeconds;}
     const rows=Object.values(rowMap).sort((a,b)=>a.epic.localeCompare(b.epic)||a.key.localeCompare(b.key));
     const dt:Record<string,number>={};for(const e of entries)dt[e.date]=(dt[e.date]||0)+e.timeSpentSeconds;
     const gt=entries.reduce((acc,e)=>acc+e.timeSpentSeconds,0);
-    const ws=XLSX.utils.aoa_to_sheet([
-      ['Épica','Clave','Incidencia','Proyecto','Total',...days.map(d=>fmtDate(d))],
-      ...rows.map(r=>[r.epic,r.key,r.summary,r.project,fmtTime(r.totalSeconds),...days.map(d=>{const s=r.byDate[d]||0;return s?fmtTime(s):'';})]),
-      ['','','','TOTAL',fmtTime(gt),...days.map(d=>{const s=dt[d]||0;return s?fmtTime(s):'';})],
-    ]);
+    const ws=XLSX.utils.aoa_to_sheet([['Épica','Clave','Incidencia','Proyecto','Total',...days.map(d=>fmtDate(d))],...rows.map(r=>[r.epic,r.key,r.summary,r.project,fmtTime(r.totalSeconds),...days.map(d=>{const s=r.byDate[d]||0;return s?fmtTime(s):'';})]),['','','','TOTAL',fmtTime(gt),...days.map(d=>{const s=dt[d]||0;return s?fmtTime(s):'';})],]);
     ws['!cols']=[{wch:30},{wch:12},{wch:40},{wch:20},{wch:10},...days.map(()=>({wch:10}))];
     const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Timesheet');XLSX.writeFile(wb,`timesheet_${from}_${to}.xlsx`);
   };
@@ -238,196 +208,171 @@ export default function TimesheetPage() {
   const filteredIssues=issues.filter(i=>i.summary.toLowerCase().includes(issueSearch.toLowerCase())||i.key.toLowerCase().includes(issueSearch.toLowerCase()));
   const panelGroups=groupIssuesForPanel(filteredIssues);
 
-  return (
-    <main className="min-h-screen bg-gray-50">
-      <header className="bg-[#0D0D0D] px-6 py-3 sticky top-0 z-10 shadow-lg">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/mindata-logo.png" alt="Mindata" className="h-7 w-auto" />
-            <span className="text-white/30 text-sm">|</span>
-            <span className="font-semibold text-white/80 text-sm tracking-wide">Carga de Horas</span>
-          </div>
-          <nav className="flex items-center gap-1 bg-white/10 rounded-xl p-1">
-            <Link href="/dashboard" className="px-4 py-1.5 text-sm font-medium text-white/60 hover:text-white rounded-lg transition-colors">Dashboard</Link>
-            <span className="px-4 py-1.5 text-sm font-semibold text-white bg-red-600 rounded-lg">Timesheet</span>
-          </nav>
-          {user&&<div className="flex items-center gap-3">
-            {user.avatarUrl?<img src={user.avatarUrl} className="w-8 h-8 rounded-full ring-2 ring-white/20" alt={user.displayName}/>:<div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center text-white text-xs font-bold">{user.displayName.charAt(0)}</div>}
-            <div className="hidden sm:block"><p className="text-sm font-medium text-white leading-tight">{user.displayName}</p><p className="text-xs text-white/50 leading-tight">{user.email}</p></div>
-            <a href="/api/auth/logout" className="text-xs text-white/40 hover:text-red-400 transition-colors ml-1 border border-white/10 rounded-lg px-2.5 py-1.5">Salir</a>
-          </div>}
-        </div>
-      </header>
+  const sidebarStyle: React.CSSProperties = { width: 280, flexShrink: 0, background: '#fff', borderRight: '1px solid #DCDEE0', display: 'flex', flexDirection: 'column', overflow: 'hidden' };
+  const sectionHeadStyle: React.CSSProperties = { padding: '10px 12px', borderBottom: '1px solid rgba(212,175,55,0.3)', background: '#FAFAFA' };
 
-      <div className="flex h-[calc(100vh-57px)]">
+  return (
+    <main style={{minHeight:'100vh',background:'#ECF0F1',fontFamily:'Arial, sans-serif'}}>
+      <AppHeader user={user} activeTab="timesheet" />
+
+      <div style={{display:'flex',height:'calc(100vh - 57px)'}}>
         {/* PANEL IZQUIERDO */}
-        <div className="w-[320px] flex-shrink-0 bg-white border-r border-gray-100 flex flex-col overflow-hidden">
-          <div className="p-3 border-b border-gray-100 bg-gray-50">
-            <h2 className="font-bold text-gray-900 text-sm">Agregar horas</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Elegí proyecto, ticket y fecha</p>
+        <div style={sidebarStyle}>
+          <div style={sectionHeadStyle}>
+            <h2 style={{fontSize:13,fontWeight:700,color:'#1C1C1C',margin:0}}>Agregar horas</h2>
+            <p style={{fontSize:11,color:'#6B6B6B',margin:'2px 0 0'}}>Elegí proyecto, ticket y fecha</p>
           </div>
-          <div className="px-3 py-2 border-b border-gray-100">
-            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide block mb-1">Fecha</label>
-            <input type="date" value={quickDate} onChange={e=>setQuickDate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500"/>
+          <div style={{padding:'8px 10px',borderBottom:'1px solid #DCDEE0'}}>
+            <p style={{fontSize:10,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:'#6B6B6B',margin:'0 0 5px'}}>Fecha</p>
+            <input type="date" value={quickDate} onChange={e=>setQuickDate(e.target.value)} style={{width:'100%',border:'1px solid #DCDEE0',borderRadius:3,padding:'6px 8px',fontSize:12,color:'#1C1C1C',outline:'none'}}/>
           </div>
-          <div className="px-3 py-2 border-b border-gray-100">
-            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide block mb-1">Proyecto</label>
-            {loadingProjects?<div className="text-xs text-gray-400 py-1">Cargando...</div>:<ProjectSelector projects={projects} value={selectedProject} onChange={setSelectedProject}/>}
+          <div style={{padding:'8px 10px',borderBottom:'1px solid #DCDEE0'}}>
+            <p style={{fontSize:10,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:'#6B6B6B',margin:'0 0 5px'}}>Proyecto</p>
+            {loadingProjects?<div style={{fontSize:11,color:'#6B6B6B'}}>Cargando...</div>:<ProjectSelector projects={projects} value={selectedProject} onChange={setSelectedProject}/>}
           </div>
-          {selectedProject&&<div className="px-3 py-2 border-b border-gray-100">
-            <div className="relative"><svg className="w-3 h-3 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg><input type="text" placeholder="Filtrar tickets..." value={issueSearch} onChange={e=>setIssueSearch(e.target.value)} className="w-full border border-gray-200 rounded-lg pl-6 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-500"/></div>
+          {selectedProject&&<div style={{padding:'6px 10px',borderBottom:'1px solid #DCDEE0'}}>
+            <input type="text" placeholder="🔍 Filtrar tickets..." value={issueSearch} onChange={e=>setIssueSearch(e.target.value)} style={{width:'100%',border:'1px solid #DCDEE0',borderRadius:3,padding:'5px 8px',fontSize:11,outline:'none'}}/>
           </div>}
-          <div className="flex-1 overflow-y-auto p-3">
-            {loadingIssues?<div className="flex items-center justify-center gap-2 py-6 text-xs text-gray-400"><div className="w-3 h-3 border-2 border-gray-200 border-t-red-500 rounded-full animate-spin"/>Cargando...</div>
-            :!selectedProject?<div className="text-center py-6"><div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2"><svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg></div><p className="text-xs text-gray-400">Elegí un proyecto</p></div>
-            :filteredIssues.length===0?<p className="text-xs text-gray-400 text-center py-4">Sin tickets activos</p>
+          <div style={{flex:1,overflowY:'auto',padding:10}}>
+            {loadingIssues?<div style={{textAlign:'center',padding:'20px 0',fontSize:12,color:'#6B6B6B'}}>Cargando...</div>
+            :!selectedProject?<div style={{textAlign:'center',padding:'24px 0'}}><div style={{fontSize:28,marginBottom:6}}>📁</div><p style={{fontSize:12,color:'#9CA3AF',margin:0}}>Elegí un proyecto</p></div>
+            :filteredIssues.length===0?<p style={{fontSize:11,color:'#9CA3AF',textAlign:'center',padding:'16px 0'}}>Sin tickets activos</p>
             :panelGroups.map(g=><PanelEpicGroup key={g.parentKey||"__none__"} group={g} onAdd={i=>setNewEntry({issueKey:i.key,issueSummary:i.summary,date:quickDate})}/>)}
           </div>
         </div>
 
         {/* PANEL DERECHO */}
-        <div className="flex-1 overflow-auto">
-          <div className="p-5 space-y-4">
-            {/* Controles */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-              <div className="flex flex-wrap items-center gap-3 justify-between">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button onClick={()=>shiftWeek(-1)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 hover:border-red-200 transition-colors"><svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg></button>
-                  <div className="flex items-center gap-2">
-                    <input type="date" value={from} onChange={e=>setFrom(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500"/>
-                    <span className="text-gray-400 text-sm">→</span>
-                    <input type="date" value={to} onChange={e=>setTo(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500"/>
-                  </div>
-                  <button onClick={()=>shiftWeek(1)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 hover:border-red-200 transition-colors"><svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg></button>
-                  <button onClick={goThisWeek} className="text-xs font-medium text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-200 transition-colors">Esta semana</button>
-                  <button onClick={goThisMonth} className="text-xs font-medium text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 transition-colors">Este mes</button>
-                </div>
-                <div className="flex items-center gap-3">
-                  {!loading&&entries.length>0&&<span className="text-sm text-gray-400">Total: <span className="font-bold text-gray-900">{fmtTime(gt)}</span></span>}
-                  <button onClick={exportToExcel} disabled={!entries.length||loading} className="flex items-center gap-2 text-sm font-medium text-green-700 hover:bg-green-50 px-3 py-1.5 rounded-lg border border-green-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    Exportar Excel
-                  </button>
-                </div>
+        <div style={{flex:1,overflow:'auto',padding:16}}>
+          {/* Controles */}
+          <div style={{background:'#fff',border:'1px solid #DCDEE0',borderRadius:3,boxShadow:'0 1px 0 rgba(28,28,28,0.04)',padding:'10px 14px',display:'flex',flexWrap:'wrap',alignItems:'center',gap:10,justifyContent:'space-between',marginBottom:14}}>
+            <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+              <button onClick={()=>shiftWeek(-1)} style={{width:28,height:28,border:'1px solid #DCDEE0',borderRadius:3,background:'#F9FAFB',cursor:'pointer',fontSize:12}}>◀</button>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{border:'1px solid #DCDEE0',borderRadius:3,padding:'5px 8px',fontSize:12,color:'#1C1C1C',outline:'none'}}/>
+                <span style={{color:'#9CA3AF',fontSize:12}}>→</span>
+                <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={{border:'1px solid #DCDEE0',borderRadius:3,padding:'5px 8px',fontSize:12,color:'#1C1C1C',outline:'none'}}/>
               </div>
+              <button onClick={()=>shiftWeek(1)} style={{width:28,height:28,border:'1px solid #DCDEE0',borderRadius:3,background:'#F9FAFB',cursor:'pointer',fontSize:12}}>▶</button>
+              <button onClick={goThisWeek} style={{fontSize:11,padding:'5px 10px',border:'1px solid #E30613',borderRadius:3,color:'#E30613',background:'#fff',cursor:'pointer',fontWeight:700}}>Esta semana</button>
+              <button onClick={goThisMonth} style={{fontSize:11,padding:'5px 10px',border:'1px solid #DCDEE0',borderRadius:3,color:'#6B6B6B',background:'#fff',cursor:'pointer'}}>Este mes</button>
             </div>
-
-            {error&&<div className="p-3 bg-red-50 border border-red-100 rounded-xl"><p className="text-sm text-red-600">{error}</p></div>}
-
-            {/* Tabla */}
-            {loading?(
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 flex items-center justify-center gap-3 text-gray-400">
-                <div className="w-5 h-5 border-2 border-gray-200 border-t-red-500 rounded-full animate-spin"/>Cargando registros...
-              </div>
-            ):(
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm border-collapse">
-                    <thead>
-                      <tr className="border-b-2 border-gray-100">
-                        <th className="text-left px-4 py-3 text-xs font-semibold text-white uppercase tracking-wide bg-[#0D0D0D] sticky left-0 z-10 min-w-[260px] border-r border-gray-700">Incidencia</th>
-                        <th className="text-right px-3 py-3 text-xs font-semibold text-white/60 uppercase tracking-wide bg-[#0D0D0D] min-w-[70px]">Total</th>
-                        {days.map(d=>(
-                          <th key={d} className={`text-center px-1 py-3 min-w-[44px] bg-[#0D0D0D] ${d===today?"border-b-2 border-red-500":""}`}>
-                            <div className={`text-xs font-semibold uppercase tracking-wide ${d===today?"text-red-400":isWE(d)?"text-white/20":"text-white/50"}`}>{new Date(d+"T12:00:00").toLocaleDateString("es-AR",{weekday:"short"})}</div>
-                            <div className={`text-sm font-bold mt-0.5 ${d===today?"text-red-400":isWE(d)?"text-white/20":"text-white"}`}>{new Date(d+"T12:00:00").getDate()}</div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {epicGroups.length===0?(
-                        <tr><td colSpan={days.length+2} className="text-center py-12 text-gray-400 text-sm">No hay registros en este período</td></tr>
-                      ):epicGroups.map(epic=>{
-                        const epicKey = epic.parentKey || "__none__";
-                        const isCollapsed = collapsedEpics[epicKey] ?? false;
-                        const isEpic = !!epic.parentKey;
-                        return (
-                          <>
-                            {/* Fila de épica */}
-                            <tr key={`epic-${epicKey}`} className="border-b border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors" onClick={()=>toggleEpic(epicKey)}>
-                              <td className="px-4 py-2 sticky left-0 bg-gray-50 border-r border-gray-200 z-10" colSpan={1}>
-                                <div className="flex items-center gap-2">
-                                  <svg className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${isCollapsed?"-rotate-90":""}`} fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
-                                  {isEpic?<><span className="text-purple-500">⚡</span><span className="text-xs font-bold text-gray-700 truncate">{epic.parentSummary}</span><span className="text-xs text-red-500 font-mono ml-1">{epic.parentKey}</span></>:<span className="text-xs font-bold text-gray-400">Sin épica</span>}
-                                  <span className="text-xs text-gray-400 ml-1">({epic.issues.length} ticket{epic.issues.length>1?"s":""})</span>
-                                </div>
-                              </td>
-                              <td className="px-3 py-2 text-right"><span className="text-xs font-bold text-gray-600">{fmtTime(epic.totalSeconds)}</span></td>
-                              {days.map(d=>{
-                                const secs=epic.issues.reduce((acc,i)=>{const de=i.byDate[d]||[];return acc+de.reduce((a,e)=>a+e.timeSpentSeconds,0);},0);
-                                return <td key={d} className={`px-1 py-2 text-center ${isWE(d)?"bg-gray-100/60":""}`}>{secs>0?<span className="text-xs font-semibold text-gray-500">{fmtTime(secs)}</span>:<span className="text-gray-200 text-xs">—</span>}</td>;
-                              })}
-                            </tr>
-                            {/* Filas de tickets (colapsables) */}
-                            {!isCollapsed && epic.issues.map((row, ri)=>{
-                              const ts=ISSUE_TYPE_STYLES[row.issueType]||{emoji:"📄",color:"text-gray-400"};
-                              return (
-                                <tr key={row.issueKey} className={`border-b border-gray-50 hover:bg-red-50/10 transition-colors ${ri%2===0?"":"bg-gray-50/20"}`}>
-                                  <td className="px-4 py-3 sticky left-0 bg-white border-r border-gray-100 z-10 pl-8">
-                                    <div className="flex items-start gap-2">
-                                      <span className={`text-sm mt-0.5 ${ts.color}`}>{ts.emoji}</span>
-                                      <div className="min-w-0"><p className="font-medium text-gray-900 truncate max-w-[200px]">{row.issueSummary}</p><div className="flex items-center gap-1.5 mt-0.5"><span className="text-xs font-mono font-semibold text-red-500">{row.issueKey}</span><span className="text-xs text-gray-400">· {row.project}</span></div></div>
-                                    </div>
-                                  </td>
-                                  <td className="px-3 py-3 text-right"><span className="text-sm font-bold text-gray-900">{fmtTime(row.totalSeconds)}</span></td>
-                                  {days.map(d=>{
-                                    const de=row.byDate[d]||[];
-                                    const ds=de.reduce((a,e)=>a+e.timeSpentSeconds,0);
-                                    const we=isWE(d);
-                                    return (
-                                      <td key={d} className={`px-1 py-2 text-center align-middle group ${we?"bg-gray-50/60":d===today?"bg-red-50/30":""}`}>
-                                        {de.length>0?(
-                                          <div className="flex flex-col items-center gap-1">
-                                            <span className="text-sm font-semibold text-gray-800">{fmtTime(ds)}</span>
-                                            <div className="flex items-center gap-0.5">{de.map(e=>(
-                                              <div key={e.worklogId} className="flex items-center gap-0.5">
-                                                <button onClick={()=>setEditingEntry(e)} title="Editar" className="text-gray-300 hover:text-red-500 transition-colors"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
-                                                <button onClick={()=>handleDelete(e)} disabled={deletingId===e.worklogId} title="Eliminar" className="text-gray-300 hover:text-red-500 transition-colors"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg></button>
-                                              </div>
-                                            ))}</div>
-                                          </div>
-                                        ):!we?(
-                                          <button onClick={()=>setNewEntry({issueKey:row.issueKey,issueSummary:row.issueSummary,date:d})} className="w-full h-8 flex items-center justify-center text-gray-200 hover:text-red-400 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100" title={`Agregar horas en ${fmtDate(d)}`}>
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
-                                          </button>
-                                        ):<span className="text-gray-200 text-xs">—</span>}
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                              );
-                            })}
-                          </>
-                        );
-                      })}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t-2 border-gray-200">
-                        <td className="px-4 py-3 sticky left-0 bg-[#0D0D0D] border-r border-gray-700 z-10"><span className="text-xs font-bold text-white uppercase tracking-wide">Total</span></td>
-                        <td className="px-3 py-3 text-right bg-[#0D0D0D]"><span className="text-sm font-bold text-white">{fmtTime(gt)}</span></td>
-                        {days.map(d=>{
-                          const s=dt[d]||0;const ic=s>=JORNADA_HORAS*3600;const over=s>JORNADA_HORAS*3600;
-                          return <td key={d} className={`px-1 py-3 text-center bg-[#0D0D0D] ${isWE(d)?"opacity-30":""}`}>{s>0?<span className={`text-sm font-bold ${over?"text-red-400":ic?"text-green-400":"text-orange-400"}`}>{over?"⚠ ":""}{fmtTime(s)}</span>:<span className="text-white/20 text-xs">—</span>}</td>;
-                        })}
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-                {epicGroups.length>0&&<div className="px-4 py-3 border-t border-gray-100 flex items-center gap-4 text-xs text-gray-400">
-                  <span className="flex items-center gap-1.5"><span className="font-bold text-green-600">8h</span> Día completo</span>
-                  <span className="flex items-center gap-1.5"><span className="font-bold text-orange-500">5h</span> Día parcial</span>
-                  <span className="flex items-center gap-1.5"><span className="font-bold text-red-500">⚠</span> Más de 8h</span>
-                  <span>Click en la épica para colapsar · Hover en celda vacía para agregar</span>
-                </div>}
-              </div>
-            )}
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              {!loading&&entries.length>0&&<span style={{fontSize:12,color:'#6B6B6B'}}>Total: <strong style={{color:'#1C1C1C'}}>{fmtTime(gt)}</strong></span>}
+              <button onClick={exportToExcel} disabled={!entries.length||loading} style={{display:'flex',alignItems:'center',gap:5,fontSize:12,fontWeight:700,color:'#1F7A44',border:'1px solid #1F7A44',borderRadius:3,padding:'5px 10px',background:'#fff',cursor:'pointer',opacity:(!entries.length||loading)?0.4:1}}>
+                ⬇ Exportar Excel
+              </button>
+            </div>
           </div>
+
+          {error&&<div style={{background:'#FBEEEE',borderLeft:'3px solid #E30613',padding:'8px 12px',fontSize:12,marginBottom:12,color:'#8E0000',borderRadius:3}}>{error}</div>}
+
+          {/* Tabla */}
+          {loading?(
+            <div style={{background:'#fff',border:'1px solid #DCDEE0',borderRadius:3,padding:40,display:'flex',alignItems:'center',justifyContent:'center',gap:10,color:'#6B6B6B',fontSize:13}}>
+              <div style={{width:18,height:18,border:'2px solid #DCDEE0',borderTop:'2px solid #E30613',borderRadius:'50%'}}/>Cargando registros...
+            </div>
+          ):(
+            <div style={{background:'#fff',border:'1px solid #DCDEE0',borderRadius:3,overflow:'hidden'}}>
+              <div style={{overflowX:'auto'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:600}}>
+                  <thead>
+                    <tr style={{background:'#1C1C1C'}}>
+                      <th style={{textAlign:'left',padding:'8px 12px',fontSize:10,fontWeight:700,color:'#fff',textTransform:'uppercase',letterSpacing:'0.1em',minWidth:240,borderRight:'1px solid rgba(212,175,55,0.3)',position:'sticky',left:0,background:'#1C1C1C',zIndex:10}}>Incidencia</th>
+                      <th style={{textAlign:'right',padding:'8px 10px',fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.6)',textTransform:'uppercase',minWidth:70}}>Total</th>
+                      {days.map(d=>(
+                        <th key={d} style={{textAlign:'center',padding:'6px 4px',minWidth:42,background:'#1C1C1C',borderBottom:d===today?'2px solid #E30613':'none'}}>
+                          <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:d===today?'#E30613':isWE(d)?'rgba(255,255,255,0.2)':'rgba(255,255,255,0.5)'}}>{new Date(d+"T12:00:00").toLocaleDateString("es-AR",{weekday:"short"})}</div>
+                          <div style={{fontSize:12,fontWeight:700,color:d===today?'#E30613':isWE(d)?'rgba(255,255,255,0.2)':'#fff'}}>{new Date(d+"T12:00:00").getDate()}</div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {epicGroups.length===0?(
+                      <tr><td colSpan={days.length+2} style={{textAlign:'center',padding:40,color:'#9CA3AF',fontSize:13}}>No hay registros en este período</td></tr>
+                    ):epicGroups.map(epic=>{
+                      const epicKey=epic.parentKey||"__none__";
+                      const isCollapsed=collapsedEpics[epicKey]??false;
+                      const isEpic=!!epic.parentKey;
+                      return (
+                        <>
+                          <tr key={`epic-${epicKey}`} style={{background:'#F5F5F0',cursor:'pointer',borderBottom:'1px solid #DCDEE0'}} onClick={()=>toggleEpic(epicKey)}>
+                            <td style={{padding:'7px 12px',position:'sticky',left:0,background:'#F5F5F0',borderRight:'1px solid rgba(212,175,55,0.3)',zIndex:5}}>
+                              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                                <span style={{fontSize:10,color:'#9CA3AF',transform:isCollapsed?'rotate(-90deg)':'none',display:'inline-block',transition:'transform 0.12s'}}>▼</span>
+                                {isEpic?<><span style={{fontSize:13}}>⚡</span><span style={{fontSize:12,fontWeight:700,color:'#1C1C1C',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{epic.parentSummary}</span><span style={{fontSize:10,color:'#E30613',fontFamily:'monospace',fontWeight:700,flexShrink:0,marginLeft:4}}>{epic.parentKey}</span></>:<span style={{fontSize:12,fontWeight:700,color:'#9CA3AF'}}>Sin épica</span>}
+                                <span style={{fontSize:10,color:'#9CA3AF',marginLeft:4}}>({epic.issues.length} ticket{epic.issues.length>1?'s':''})</span>
+                              </div>
+                            </td>
+                            <td style={{textAlign:'right',padding:'7px 10px'}}><span style={{fontSize:11,fontWeight:700,color:'#6B6B6B'}}>{fmtTime(epic.totalSeconds)}</span></td>
+                            {days.map(d=>{const secs=epic.issues.reduce((acc,i)=>{const de=i.byDate[d]||[];return acc+de.reduce((a,e)=>a+e.timeSpentSeconds,0);},0);return <td key={d} style={{textAlign:'center',padding:'7px 4px',background:isWE(d)?'#F0F0EC':'#F5F5F0'}}>{secs>0?<span style={{fontSize:10,color:'#6B6B6B'}}>{fmtTime(secs)}</span>:<span style={{color:'#DCDEE0',fontSize:10}}>—</span>}</td>;})}
+                          </tr>
+                          {!isCollapsed&&epic.issues.map((row,ri)=>{
+                            const ts=ISSUE_TYPE_STYLES[row.issueType]||{emoji:"📄",color:"#9CA3AF"};
+                            return (
+                              <tr key={row.issueKey} style={{borderBottom:'1px solid #F0F0F0',background:ri%2===0?'#fff':'#FAFAFA'}}>
+                                <td style={{padding:'8px 12px 8px 24px',position:'sticky',left:0,background:ri%2===0?'#fff':'#FAFAFA',borderRight:'1px solid rgba(212,175,55,0.2)',zIndex:5}}>
+                                  <div style={{display:'flex',alignItems:'flex-start',gap:6}}>
+                                    <span style={{fontSize:13,marginTop:1,color:ts.color}}>{ts.emoji}</span>
+                                    <div style={{minWidth:0}}><p style={{margin:0,fontSize:12,fontWeight:600,color:'#1C1C1C',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:200}}>{row.issueSummary}</p><div style={{display:'flex',gap:6,marginTop:2}}><span style={{fontSize:10,fontFamily:'monospace',fontWeight:700,color:'#E30613'}}>{row.issueKey}</span><span style={{fontSize:10,color:'#9CA3AF'}}>· {row.project}</span></div></div>
+                                  </div>
+                                </td>
+                                <td style={{textAlign:'right',padding:'8px 10px'}}><span style={{fontSize:12,fontWeight:700,color:'#1C1C1C'}}>{fmtTime(row.totalSeconds)}</span></td>
+                                {days.map(d=>{
+                                  const de=row.byDate[d]||[];const ds=de.reduce((a,e)=>a+e.timeSpentSeconds,0);const we=isWE(d);
+                                  return (
+                                    <td key={d} style={{textAlign:'center',padding:'6px 4px',background:we?'#F5F5F5':d===today?'#FFF9F0':'',position:'relative'}} className="group">
+                                      {de.length>0?(
+                                        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
+                                          <span style={{fontSize:12,fontWeight:700,color:'#1C1C1C'}}>{fmtTime(ds)}</span>
+                                          <div style={{display:'flex',gap:2}}>
+                                            {de.map(e=>(
+                                              <div key={e.worklogId} style={{display:'flex',gap:2}}>
+                                                <button onClick={()=>setEditingEntry(e)} title="Editar" style={{background:'none',border:'none',cursor:'pointer',color:'#DCDEE0',fontSize:12,padding:'0 1px'}} onMouseOver={e2=>(e2.currentTarget.style.color='#E30613')} onMouseOut={e2=>(e2.currentTarget.style.color='#DCDEE0')}>✎</button>
+                                                <button onClick={()=>handleDelete(e)} disabled={deletingId===e.worklogId} title="Eliminar" style={{background:'none',border:'none',cursor:'pointer',color:'#DCDEE0',fontSize:12,padding:'0 1px'}} onMouseOver={e2=>(e2.currentTarget.style.color='#E30613')} onMouseOut={e2=>(e2.currentTarget.style.color='#DCDEE0')}>✕</button>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      ):!we?(
+                                        <button onClick={()=>setNewEntry({issueKey:row.issueKey,issueSummary:row.issueSummary,date:d})} style={{width:'100%',height:32,border:'none',background:'transparent',cursor:'pointer',color:'transparent',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}} onMouseOver={e=>{e.currentTarget.style.color='#E30613';e.currentTarget.style.background='#FBEEEE';}} onMouseOut={e=>{e.currentTarget.style.color='transparent';e.currentTarget.style.background='transparent';}} title={`Agregar horas en ${fmtDate(d)}`}>+</button>
+                                      ):<span style={{color:'#E8E8E8',fontSize:10}}>—</span>}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })}
+                        </>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{background:'#1C1C1C',borderTop:'2px solid rgba(212,175,55,0.4)'}}>
+                      <td style={{padding:'8px 12px',position:'sticky',left:0,background:'#1C1C1C',zIndex:5,borderRight:'1px solid rgba(212,175,55,0.3)'}}><span style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.6)',textTransform:'uppercase',letterSpacing:'0.1em'}}>Total</span></td>
+                      <td style={{textAlign:'right',padding:'8px 10px'}}><span style={{fontSize:12,fontWeight:700,color:'#fff'}}>{fmtTime(gt)}</span></td>
+                      {days.map(d=>{
+                        const s=dt[d]||0;const ic=s>=JORNADA_HORAS*3600;const over=s>JORNADA_HORAS*3600;
+                        return <td key={d} style={{textAlign:'center',padding:'8px 4px',background:'#1C1C1C',opacity:isWE(d)?0.3:1}}>{s>0?<span style={{fontSize:11,fontWeight:700,color:over?'#EF4444':ic?'#10B981':'#F59E0B'}}>{over?'⚠ ':''}{fmtTime(s)}</span>:<span style={{color:'rgba(255,255,255,0.2)',fontSize:10}}>—</span>}</td>;
+                      })}
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              {epicGroups.length>0&&<div style={{padding:'8px 12px',borderTop:'1px solid rgba(212,175,55,0.2)',display:'flex',gap:14,background:'#FAFAFA',flexWrap:'wrap'}}>
+                <span style={{fontSize:10,color:'#1F7A44',fontWeight:700}}>8h Día completo</span>
+                <span style={{fontSize:10,color:'#92400E',fontWeight:700}}>5h Día parcial</span>
+                <span style={{fontSize:10,color:'#EF4444',fontWeight:700}}>⚠ Más de 8h</span>
+                <span style={{fontSize:10,color:'#9CA3AF'}}>· Click en épica para colapsar · Hover en celda vacía para agregar</span>
+              </div>}
+            </div>
+          )}
         </div>
       </div>
 
       {editingEntry&&<EntryModal title="Editar registro" issueKey={editingEntry.issueKey} issueSummary={editingEntry.issueSummary} date={editingEntry.date} initialHours={editingEntry.hours} initialMinutes={editingEntry.minutes} initialComment={editingEntry.comment} worklogId={editingEntry.worklogId} onSave={handleSaveEdit} onClose={()=>setEditingEntry(null)}/>}
       {newEntry&&<EntryModal title="Nuevo registro" issueKey={newEntry.issueKey} issueSummary={newEntry.issueSummary} date={newEntry.date} onSave={handleSaveNew} onClose={()=>setNewEntry(null)}/>}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </main>
   );
 }
