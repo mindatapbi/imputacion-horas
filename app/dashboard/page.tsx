@@ -107,6 +107,10 @@ export default function Dashboard() {
   const [sessionExpired, setSessionExpired] = useState(false);
   const [activeTimerTicket, setActiveTimerTicket] = useState<{ key: string; summary: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [filterProject, setFilterProject] = useState("");
+  const [filterEpic, setFilterEpic] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [soloMias, setSoloMias] = useState(true);     
 
   // Buscador
   const [query, setQuery] = useState("");
@@ -122,6 +126,11 @@ export default function Dashboard() {
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const days = getWeekDays(refDate);
+  const filteredRows = rows.filter(r =>
+  (!filterProject || r.issue.project === filterProject) &&
+  (!filterEpic || r.issue.parentSummary === filterEpic) &&
+  (!filterStatus || r.issue.status === filterStatus)
+);
   const pendingChanges = rows.some(r => Object.values(r.cells).some(c => c.dirty));
 
   useEffect(() => { fetchUser(); }, []);
@@ -389,6 +398,35 @@ export default function Dashboard() {
           )}
         </div>
 
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <select value={filterProject} onChange={e => setFilterProject(e.target.value)}
+            style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterProject ? '#E30613' : '#6B6B6B', fontWeight: filterProject ? 700 : 400 }}>
+            <option value="">Proyecto ▾</option>
+            {[...new Set(rows.map(r => r.issue.project).filter(Boolean))].sort().map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <select value={filterEpic} onChange={e => setFilterEpic(e.target.value)}
+            style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterEpic ? '#E30613' : '#6B6B6B', fontWeight: filterEpic ? 700 : 400 }}>
+            <option value="">Épica ▾</option>
+            {[...new Set(rows.map(r => r.issue.parentSummary).filter(Boolean))].sort().map(e => <option key={e} value={e!}>{e}</option>)}
+          </select>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+            style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterStatus ? '#E30613' : '#6B6B6B', fontWeight: filterStatus ? 700 : 400 }}>
+            <option value="">Estado ▾</option>
+            {[...new Set(rows.map(r => r.issue.status).filter(Boolean))].sort().map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#6B6B6B', cursor: 'pointer' }}>
+            <input type="checkbox" checked={soloMias} onChange={e => setSoloMias(e.target.checked)}
+              style={{ accentColor: '#E30613', width: 14, height: 14 }} />
+            Solo mis incidencias
+          </label>
+          {(filterProject || filterEpic || filterStatus) && (
+            <button onClick={() => { setFilterProject(""); setFilterEpic(""); setFilterStatus(""); }}
+              style={{ fontSize: 11, color: '#E30613', border: '1px solid #E30613', borderRadius: 3, padding: '4px 8px', background: '#fff', cursor: 'pointer' }}>
+              ✕ Limpiar filtros
+            </button>
+          )}
+        </div>
+
         {/* Tabla */}
         <div style={{ background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, overflow: 'hidden', flex: 1 }}>
           <div style={{ overflowX: 'auto' }}>
@@ -416,13 +454,19 @@ export default function Dashboard() {
                       Cargando registros de la semana...
                     </div>
                   </td></tr>
-                ) : rows.length === 0 ? (
-                  <tr><td colSpan={days.length + 3} style={{ textAlign: 'center', padding: '48px 16px', color: '#9CA3AF' }}>
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
-                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>No hay registros esta semana</p>
-                    <p style={{ margin: '4px 0 0', fontSize: 12 }}>Buscá una incidencia arriba para agregar horas</p>
-                  </td></tr>
-                ) : rows.map((row, ri) => {
+             ) : rows.length === 0 ? (
+  <tr><td colSpan={days.length + 3} style={{ textAlign: 'center', padding: '48px 16px', color: '#9CA3AF' }}>
+    <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
+    <p style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>No hay registros esta semana</p>
+    <p style={{ margin: '4px 0 0', fontSize: 12 }}>Buscá una incidencia arriba para agregar horas</p>
+  </td></tr>
+) : filteredRows.length === 0 ? (
+  <tr><td colSpan={days.length + 3} style={{ textAlign: 'center', padding: '48px 16px', color: '#9CA3AF' }}>
+    <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
+    <p style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>No hay resultados con los filtros aplicados</p>
+    <p style={{ margin: '4px 0 0', fontSize: 12 }}>Probá cambiando o limpiando los filtros</p>
+  </td></tr>
+) : filteredRows.map((row, ri) => {
                   const ts = ISSUE_TYPE_STYLES[row.issue.issueType] || { emoji: "📄", color: "#9CA3AF" };
                   const rowTotal = rowTotals[row.issue.key] || 0;
                   const hasDirty = Object.values(row.cells).some(c => c.dirty);
