@@ -110,6 +110,7 @@ export default function Dashboard() {
   const [filterProject, setFilterProject] = useState("");
   const [filterEpic, setFilterEpic] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterIssue, setFilterIssue] = useState("");
   const [soloMias, setSoloMias] = useState(true);     
 
   // Buscador
@@ -129,7 +130,8 @@ export default function Dashboard() {
   const filteredRows = rows.filter(r =>
   (!filterProject || r.issue.project === filterProject) &&
   (!filterEpic || r.issue.parentSummary === filterEpic) &&
-  (!filterStatus || r.issue.status === filterStatus)
+  (!filterStatus || r.issue.status === filterStatus) &&
+(!filterIssue || r.issue.key === filterIssue)
 );
   const pendingChanges = rows.some(r => Object.values(r.cells).some(c => c.dirty));
 
@@ -398,34 +400,39 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          <select value={filterProject} onChange={e => setFilterProject(e.target.value)}
-            style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterProject ? '#E30613' : '#6B6B6B', fontWeight: filterProject ? 700 : 400 }}>
-            <option value="">Proyecto ▾</option>
-            {[...new Set(rows.map(r => r.issue.project).filter(Boolean))].sort().map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
-          <select value={filterEpic} onChange={e => setFilterEpic(e.target.value)}
-            style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterEpic ? '#E30613' : '#6B6B6B', fontWeight: filterEpic ? 700 : 400 }}>
-            <option value="">Épica ▾</option>
-            {[...new Set(rows.map(r => r.issue.parentSummary).filter(Boolean))].sort().map(e => <option key={e} value={e!}>{e}</option>)}
-          </select>
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-            style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterStatus ? '#E30613' : '#6B6B6B', fontWeight: filterStatus ? 700 : 400 }}>
-            <option value="">Estado ▾</option>
-            {[...new Set(rows.map(r => r.issue.status).filter(Boolean))].sort().map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#6B6B6B', cursor: 'pointer' }}>
-            <input type="checkbox" checked={soloMias} onChange={e => setSoloMias(e.target.checked)}
-              style={{ accentColor: '#E30613', width: 14, height: 14 }} />
-            Solo mis incidencias
-          </label>
-          {(filterProject || filterEpic || filterStatus) && (
-            <button onClick={() => { setFilterProject(""); setFilterEpic(""); setFilterStatus(""); }}
-              style={{ fontSize: 11, color: '#E30613', border: '1px solid #E30613', borderRadius: 3, padding: '4px 8px', background: '#fff', cursor: 'pointer' }}>
-              ✕ Limpiar filtros
-            </button>
-          )}
-        </div>
+     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+  <select value={filterProject} onChange={e => setFilterProject(e.target.value)}
+    style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterProject ? '#E30613' : '#6B6B6B', fontWeight: filterProject ? 700 : 400 }}>
+    <option value="">Proyecto ▾</option>
+    {[...new Set(rows.map(r => r.issue.project).filter(Boolean))].sort().map(p => <option key={p} value={p}>{p}</option>)}
+  </select>
+  <select value={filterEpic} onChange={e => setFilterEpic(e.target.value)}
+    style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterEpic ? '#E30613' : '#6B6B6B', fontWeight: filterEpic ? 700 : 400 }}>
+    <option value="">Épica ▾</option>
+    {[...new Set(rows.map(r => r.issue.parentSummary).filter(Boolean))].sort().map(ep => <option key={ep} value={ep!}>{ep}</option>)}
+  </select>
+  <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+    style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterStatus ? '#E30613' : '#6B6B6B', fontWeight: filterStatus ? 700 : 400 }}>
+    <option value="">Estado ▾</option>
+    {[...new Set(rows.map(r => r.issue.status).filter(Boolean))].sort().map(s => <option key={s} value={s}>{s}</option>)}
+  </select>
+  <select value={filterIssue} onChange={e => setFilterIssue(e.target.value)}
+    style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterIssue ? '#E30613' : '#6B6B6B', fontWeight: filterIssue ? 700 : 400 }}>
+    <option value="">Tarea ▾</option>
+    {[...new Set(rows.map(r => r.issue.key).filter(Boolean))].sort().map(k => <option key={k} value={k}>{k}</option>)}
+  </select>
+  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#6B6B6B', cursor: 'pointer' }}>
+    <input type="checkbox" checked={soloMias} onChange={e => setSoloMias(e.target.checked)}
+      style={{ accentColor: '#E30613', width: 14, height: 14 }} />
+    Solo mis incidencias
+  </label>
+  {(filterProject || filterEpic || filterStatus || filterIssue) && (
+    <button onClick={() => { setFilterProject(""); setFilterEpic(""); setFilterStatus(""); setFilterIssue(""); }}
+      style={{ fontSize: 11, color: '#E30613', border: '1px solid #E30613', borderRadius: 3, padding: '4px 8px', background: '#fff', cursor: 'pointer' }}>
+      ✕ Limpiar filtros
+    </button>
+  )}
+</div>
 
         {/* Tabla */}
         <div style={{ background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, overflow: 'hidden', flex: 1 }}>
