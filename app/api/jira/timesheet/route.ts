@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   try {
     const jql = encodeURIComponent(`worklogAuthor = currentUser() AND worklogDate >= "${from}" AND worklogDate <= "${to}"`);
     const issuesRes = await fetch(
-      `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,project,issuetype,parent&maxResults=100`,
+      `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,status,project,issuetype,parent&maxResults=100`,
       { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
     );
     const issuesData = await issuesRes.json();
