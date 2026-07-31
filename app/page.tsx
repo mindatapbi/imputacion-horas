@@ -12,11 +12,11 @@ export default async function Home({
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
   const params = await searchParams;
 
-  if (session.user?.accountId && session.cloudId) {
+if (session.user?.accountId && session.cloudId) {
     const token = await getToken(session.user.accountId) ||
                   await refreshAccessToken(session.user.accountId, session.cloudId);
     if (token) redirect("/dashboard");
-    else session.destroy();
+    else redirect("/api/auth/logout");
   }
 
   const authUrl = `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${process.env.ATLASSIAN_CLIENT_ID}&scope=read%3Ajira-user%20read%3Ajira-work%20write%3Ajira-work%20read%3Agroup%3Ajira&redirect_uri=${encodeURIComponent(process.env.ATLASSIAN_CALLBACK_URL!)}&response_type=code&prompt=consent`;
