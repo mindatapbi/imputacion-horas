@@ -419,7 +419,7 @@ export default function Dashboard() {
   <select value={filterIssue} onChange={e => setFilterIssue(e.target.value)}
     style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterIssue ? '#E30613' : '#6B6B6B', fontWeight: filterIssue ? 700 : 400 }}>
     <option value="">Tarea ▾</option>
-    {[...new Set(rows.map(r => r.issue.key).filter(Boolean))].sort().map(k => <option key={k} value={k}>{k}</option>)}
+    {rows.filter((r, i, a) => a.findIndex(x => x.issue.key === r.issue.key) === i).sort((a, b) => a.issue.key.localeCompare(b.issue.key)).map(r => <option key={r.issue.key} value={r.issue.key}>{r.issue.key} · {r.issue.summary}</option>)}
   </select>
   <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#6B6B6B', cursor: 'pointer' }}>
     <input type="checkbox" checked={soloMias} onChange={e => setSoloMias(e.target.checked)}
