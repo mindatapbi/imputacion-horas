@@ -33,15 +33,23 @@ function fmtTimer(s: number) {
   return `${pad(h)}:${pad(m)}:${pad(sec)}`;
 }
 
-export default function AppHeader({ user, activeTab, onTimerStop, activeTimerTicket, onStartTimer }: Props) {
+export default function AppHeader({ user, activeTab, onTimerStop, activeTimerTicket }: Props) {
   const [timer, setTimer] = useState<TimerState>({
     running: false, startedAt: null, elapsed: 0, ticketKey: "", ticketSummary: ""
   });
+  const [isMobile, setIsMobile] = useState(false);
   const interval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  useEffect(() => {
     if (activeTimerTicket && !timer.running) {
-      startTimer(activeTimerTicket.key, activeTimerTicket.summary);
+      setTimer({ running: true, startedAt: Date.now(), elapsed: 0, ticketKey: activeTimerTicket.key, ticketSummary: activeTimerTicket.summary });
     }
   }, [activeTimerTicket]);
 
@@ -56,10 +64,6 @@ export default function AppHeader({ user, activeTab, onTimerStop, activeTimerTic
     return () => { if (interval.current) clearInterval(interval.current); };
   }, [timer.running]);
 
-  const startTimer = (key: string, summary: string) => {
-    setTimer({ running: true, startedAt: Date.now(), elapsed: 0, ticketKey: key, ticketSummary: summary });
-  };
-
   const stopTimer = () => {
     if (onTimerStop) onTimerStop(timer.elapsed, timer.ticketKey, timer.ticketSummary);
     setTimer({ running: false, startedAt: null, elapsed: 0, ticketKey: "", ticketSummary: "" });
@@ -72,15 +76,14 @@ export default function AppHeader({ user, activeTab, onTimerStop, activeTimerTic
       background: '#fff',
       borderBottom: '1px solid #DCDEE0',
       boxShadow: '0 1px 0 rgba(212,175,55,0.2)',
-      display: 'flex', alignItems: 'center', gap: 20,
-      padding: '10px 22px', position: 'sticky', top: 0, zIndex: 40,
+      display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 20,
+      padding: isMobile ? '8px 12px' : '10px 22px',
+      position: 'sticky', top: 0, zIndex: 40,
     }}>
       {/* Brand */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 1, paddingRight: 20, borderRight: '1px solid rgba(212,175,55,0.45)' }}>
-        <img src="/mindata-logo.png" alt="Mindata" style={{ height: 22, width: 'auto' }} />
-        <p style={{ fontSize: 9, letterSpacing: '0.18em', color: '#6B6B6B', textTransform: 'uppercase', margin: 0 }}>
-          Carga de Horas
-        </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1, paddingRight: isMobile ? 10 : 20, borderRight: '1px solid rgba(212,175,55,0.45)', flexShrink: 0 }}>
+        <img src="/mindata-logo.png" alt="Mindata" style={{ height: isMobile ? 18 : 22, width: 'auto' }} />
+        {!isMobile && <p style={{ fontSize: 9, letterSpacing: '0.18em', color: '#6B6B6B', textTransform: 'uppercase', margin: 0 }}>Carga de Horas</p>}
       </div>
 
       {/* Tabs */}
@@ -88,7 +91,8 @@ export default function AppHeader({ user, activeTab, onTimerStop, activeTimerTic
         <Link href="/dashboard" style={{
           background: 'none', border: 0,
           borderBottom: activeTab === 'dashboard' ? '2px solid #E30613' : '2px solid transparent',
-          padding: '8px 14px', fontWeight: 700, fontSize: 13,
+          padding: isMobile ? '6px 10px' : '8px 14px',
+          fontWeight: 700, fontSize: isMobile ? 12 : 13,
           color: activeTab === 'dashboard' ? '#E30613' : '#6B6B6B',
           cursor: 'pointer', textDecoration: 'none', display: 'inline-block',
           transition: 'color 0.12s',
@@ -98,7 +102,8 @@ export default function AppHeader({ user, activeTab, onTimerStop, activeTimerTic
         <Link href="/timesheet" style={{
           background: 'none', border: 0,
           borderBottom: activeTab === 'timesheet' ? '2px solid #E30613' : '2px solid transparent',
-          padding: '8px 14px', fontWeight: 700, fontSize: 13,
+          padding: isMobile ? '6px 10px' : '8px 14px',
+          fontWeight: 700, fontSize: isMobile ? 12 : 13,
           color: activeTab === 'timesheet' ? '#E30613' : '#6B6B6B',
           cursor: 'pointer', textDecoration: 'none', display: 'inline-block',
           transition: 'color 0.12s',
@@ -108,47 +113,48 @@ export default function AppHeader({ user, activeTab, onTimerStop, activeTimerTic
       </nav>
 
       {/* Timer */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        border: isRunning ? '1px solid #E30613' : '1px solid rgba(212,175,55,0.45)',
-        borderRadius: 3, padding: '4px 6px 4px 10px',
-        background: isRunning ? '#FBEEEE' : '#fff',
-        transition: 'all 0.15s',
-      }}>
-        {isRunning ? (
-          <>
+      {isRunning && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          border: '1px solid #E30613', borderRadius: 3,
+          padding: isMobile ? '3px 6px' : '4px 6px 4px 10px',
+          background: '#FBEEEE', flexShrink: 0,
+        }}>
+          {!isMobile && (
             <div>
               <span style={{ fontSize: 11, fontWeight: 700, color: '#E30613', display: 'block' }}>{timer.ticketKey}</span>
               <span style={{ fontSize: 10, color: '#6B6B6B', display: 'block', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{timer.ticketSummary}</span>
             </div>
-            <span style={{ fontSize: 15, fontWeight: 700, minWidth: 64, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: '#1C1C1C' }}>
-              {fmtTimer(timer.elapsed)}
-            </span>
-            <button onClick={stopTimer} title="Detener y registrar" style={{
-              background: '#E30613', color: '#fff', border: 'none',
-              borderRadius: 3, padding: '4px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
-            }}>
-              ■ Stop
-            </button>
-          </>
-        ) : (
-          <span style={{ fontSize: 12, color: '#6B6B6B', fontStyle: 'italic' }}>Sin timer activo</span>
-        )}
-      </div>
+          )}
+          {isMobile && <span style={{ fontSize: 11, fontWeight: 700, color: '#E30613' }}>{timer.ticketKey}</span>}
+          <span style={{ fontSize: isMobile ? 13 : 15, fontWeight: 700, minWidth: 58, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: '#1C1C1C' }}>
+            {fmtTimer(timer.elapsed)}
+          </span>
+          <button onClick={stopTimer} style={{
+            background: '#E30613', color: '#fff', border: 'none',
+            borderRadius: 3, padding: isMobile ? '3px 6px' : '4px 8px',
+            fontSize: 11, fontWeight: 700, cursor: 'pointer',
+          }}>
+            ■
+          </button>
+        </div>
+      )}
 
       {/* Usuario */}
       {user && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12, color: '#333' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 9, flexShrink: 0 }}>
           {user.avatarUrl
-            ? <img src={user.avatarUrl} style={{ width: 26, height: 26, borderRadius: '50%' }} alt={user.displayName} />
-            : <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#E30613', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700 }}>{user.displayName.charAt(0)}</div>
+            ? <img src={user.avatarUrl} style={{ width: 28, height: 28, borderRadius: '50%' }} alt={user.displayName} />
+            : <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E30613', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{user.displayName.charAt(0)}</div>
           }
-          <div>
-            <p style={{ margin: 0, fontWeight: 700, fontSize: 12, color: '#1C1C1C' }}>{user.displayName}</p>
-            <p style={{ margin: 0, fontSize: 11, color: '#6B6B6B' }}>{user.email}</p>
-          </div>
-          <a href="/api/auth/logout" style={{ fontSize: 11, color: '#6B6B6B', border: '1px solid #DCDEE0', borderRadius: 3, padding: '4px 8px', textDecoration: 'none' }}>
-            Salir
+          {!isMobile && (
+            <div>
+              <p style={{ margin: 0, fontWeight: 700, fontSize: 12, color: '#1C1C1C' }}>{user.displayName}</p>
+              <p style={{ margin: 0, fontSize: 11, color: '#6B6B6B' }}>{user.email}</p>
+            </div>
+          )}
+          <a href="/api/auth/logout" style={{ fontSize: 11, color: '#6B6B6B', border: '1px solid #DCDEE0', borderRadius: 3, padding: '4px 8px', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            {isMobile ? '↩' : 'Salir'}
           </a>
         </div>
       )}
