@@ -478,10 +478,11 @@ export default function Dashboard() {
           saveSuccess={saveSuccess} saveError={saveError} weekTotal={weekTotal} />
       )}
       {/* FAB */}
-      <button onClick={() => setDrawerOpen(true)}
-        style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#E30613', color: '#fff', border: 'none', fontSize: 28, cursor: 'pointer', boxShadow: '0 4px 16px rgba(227,6,19,0.4)', zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 300 }}>
-        +
-      </button>
+<button onClick={() => setDrawerOpen(true)}
+  style={{ position: 'fixed', bottom: 80, right: 16, background: '#E30613', color: '#fff', border: 'none', borderRadius: 24, padding: '12px 20px', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 16px rgba(227,6,19,0.4)', zIndex: 40, display: 'flex', alignItems: 'center', gap: 8 }}>
+  <span style={{ fontSize: 20, fontWeight: 300, lineHeight: 1 }}>+</span>
+  Más tickets
+</button>
       <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} projects={projects} loadingProjects={loadingProjects} rows={rows} onAdd={i => { addIssue(i); }} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </main>
