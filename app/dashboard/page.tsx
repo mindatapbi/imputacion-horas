@@ -522,7 +522,7 @@ export default function Dashboard() {
   <>
     <div style={{ padding: '6px 10px', borderBottom: '1px solid #DCDEE0' }}>
       <input type="text" placeholder="🔍 Filtrar tickets..." value={issueSearch} onChange={e => setIssueSearch(e.target.value)}
-        style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 11, outline: 'none' }} />
+        style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 11, outline: 'none', color: '#1C1C1C' }} />
     </div>
     <div style={{ padding: '6px 10px', borderBottom: '1px solid #DCDEE0' }}>
       <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B6B6B', cursor: 'pointer' }}>
