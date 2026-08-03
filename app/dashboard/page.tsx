@@ -531,25 +531,22 @@ export default function Dashboard() {
               <button onClick={goToday} style={{ fontSize: 11, fontWeight: 700, border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 10px', background: '#fff', cursor: 'pointer' }}>Hoy</button>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <select value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterProject ? '#E30613' : '#6B6B6B', fontWeight: filterProject ? 700 : 400 }}>
-              <option value="">Proyecto ▾</option>{[...new Set(rows.map(r => r.issue.project).filter(Boolean))].sort().map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-            <select value={filterEpic} onChange={e => setFilterEpic(e.target.value)} style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterEpic ? '#E30613' : '#6B6B6B', fontWeight: filterEpic ? 700 : 400 }}>
-              <option value="">Épica ▾</option>{[...new Set(rows.map(r => r.issue.parentSummary).filter(Boolean))].sort().map(ep => <option key={ep} value={ep!}>{ep}</option>)}
-            </select>
-            <select value={filterIssue} onChange={e => setFilterIssue(e.target.value)} style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterIssue ? '#E30613' : '#6B6B6B', fontWeight: filterIssue ? 700 : 400 }}>
-              <option value="">Tarea ▾</option>{rows.filter((r, i, a) => a.findIndex(x => x.issue.key === r.issue.key) === i).sort((a, b) => a.issue.key.localeCompare(b.issue.key)).map(r => <option key={r.issue.key} value={r.issue.key}>{r.issue.key} · {r.issue.summary}</option>)}
-            </select>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 12, background: '#fff', cursor: 'pointer', color: filterStatus ? '#E30613' : '#6B6B6B', fontWeight: filterStatus ? 700 : 400 }}>
-              <option value="">Estado ▾</option>{[...new Set(rows.map(r => r.issue.status).filter(Boolean))].sort().map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#6B6B6B', cursor: 'pointer' }}>
-              <input type="checkbox" checked={soloMias} onChange={e => setSoloMias(e.target.checked)} style={{ accentColor: '#E30613', width: 14, height: 14 }} />Solo mis incidencias
-            </label>
-            {(filterProject || filterEpic || filterStatus || filterIssue) && (
-              <button onClick={() => { setFilterProject(""); setFilterEpic(""); setFilterStatus(""); setFilterIssue(""); }} style={{ fontSize: 11, color: '#E30613', border: '1px solid #E30613', borderRadius: 3, padding: '4px 8px', background: '#fff', cursor: 'pointer' }}>✕ Limpiar filtros</button>
-            )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, padding: '6px 12px' }}>
+              <svg style={{ width: 14, height: 14, color: '#9CA3AF', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+              <input type="text" value={filterIssue} onChange={e => setFilterIssue(e.target.value)} placeholder="Buscar por clave o título de incidencia..."
+                style={{ flex: 1, border: 'none', outline: 'none', fontSize: 13, color: '#1C1C1C', background: 'transparent' }} />
+              {filterIssue && <button onClick={() => setFilterIssue("")} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 14, padding: 0 }}>✕</button>}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, padding: '6px 12px' }}>
+              <span style={{ fontSize: 12, color: '#6B6B6B', whiteSpace: 'nowrap' }}>Desde</span>
+              <input type="date" value={days[0]} onChange={e => { const d = new Date(e.target.value + "T12:00:00"); setRefDate(d); }}
+                style={{ border: 'none', outline: 'none', fontSize: 12, color: '#1C1C1C', background: 'transparent', cursor: 'pointer' }} />
+              <span style={{ fontSize: 12, color: '#9CA3AF' }}>→</span>
+              <span style={{ fontSize: 12, color: '#6B6B6B', whiteSpace: 'nowrap' }}>Hasta</span>
+              <input type="date" value={days[6]} readOnly
+                style={{ border: 'none', outline: 'none', fontSize: 12, color: '#9CA3AF', background: 'transparent' }} />
+            </div>
           </div>
           <div style={{ background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, overflow: 'hidden', flex: 1 }}>
             <div style={{ overflowX: 'auto' }}>
