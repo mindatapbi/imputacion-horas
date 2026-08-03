@@ -124,7 +124,7 @@ function EpicGroup({ group, onAdd, rows }: { group: IssueGroup; onAdd: (i: Issue
           return (
             <div key={issue.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 8px', marginBottom: 3, borderRadius: 3, border: `1px solid ${added ? 'rgba(212,175,55,0.4)' : '#DCDEE0'}`, background: added ? '#FFFDF0' : '#fff', gap: 6 }}>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#1C1C1C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.summary}</p>
+                <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#E30613', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.summary}</p>
                 <div style={{ display: 'flex', gap: 5, marginTop: 2, alignItems: 'center' }}>
                   <span style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, color: '#E30613' }}>{issue.key}</span>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: STATUS_COLORS[issue.status] || '#9CA3AF', display: 'inline-block' }} />
@@ -349,6 +349,7 @@ export default function Dashboard() {
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingIssues, setLoadingIssues] = useState(false);
   const [issueSearch, setIssueSearch] = useState("");
+  const [soloAsignadasAMi, setSoloAsignadasAMi] = useState(false);
 
   // Filtros
   const [filterProject, setFilterProject] = useState("");
@@ -461,7 +462,10 @@ export default function Dashboard() {
   const isWeekend = (d: string) => { const dow = new Date(d + "T12:00:00").getDay(); return dow === 0 || dow === 6; };
   const weekRemaining = Math.max(JORNADA_SEMANAL - weekTotal, 0);
   const weekPct = Math.min((weekTotal / JORNADA_SEMANAL) * 100, 100);
-  const filteredIssues = issues.filter(i => i.summary.toLowerCase().includes(issueSearch.toLowerCase()) || i.key.toLowerCase().includes(issueSearch.toLowerCase()));
+  const filteredIssues = issues.filter(i =>
+  (i.summary.toLowerCase().includes(issueSearch.toLowerCase()) || i.key.toLowerCase().includes(issueSearch.toLowerCase())) &&
+  (!soloAsignadasAMi || (i as any).assigneeId === user?.accountId)
+);
   const groups = groupIssues(filteredIssues);
 
   if (sessionExpired) return (
@@ -515,11 +519,20 @@ export default function Dashboard() {
               : <ProjectSelector projects={projects} value={selectedProject} onChange={setSelectedProject} />}
           </div>
           {selectedProject && (
-            <div style={{ padding: '6px 10px', borderBottom: '1px solid #DCDEE0' }}>
-              <input type="text" placeholder="🔍 Filtrar tickets..." value={issueSearch} onChange={e => setIssueSearch(e.target.value)}
-                style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 11, outline: 'none' }} />
-            </div>
-          )}
+  <>
+    <div style={{ padding: '6px 10px', borderBottom: '1px solid #DCDEE0' }}>
+      <input type="text" placeholder="🔍 Filtrar tickets..." value={issueSearch} onChange={e => setIssueSearch(e.target.value)}
+        style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 11, outline: 'none' }} />
+    </div>
+    <div style={{ padding: '6px 10px', borderBottom: '1px solid #DCDEE0' }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B6B6B', cursor: 'pointer' }}>
+        <input type="checkbox" checked={soloAsignadasAMi} onChange={e => setSoloAsignadasAMi(e.target.checked)}
+          style={{ accentColor: '#E30613', width: 13, height: 13 }} />
+        Solo asignadas a mí
+      </label>
+    </div>
+  </>
+)}
           <div style={{ flex: 1, overflowY: 'auto', padding: 10 }}>
             {loadingIssues ? <div style={{ textAlign: 'center', padding: '20px 0', fontSize: 12, color: '#6B6B6B' }}>Cargando...</div>
               : !selectedProject ? <div style={{ textAlign: 'center', padding: '24px 0' }}><div style={{ fontSize: 28, marginBottom: 6 }}>📁</div><p style={{ fontSize: 12, color: '#9CA3AF', margin: 0 }}>Elegí un proyecto</p></div>
@@ -561,15 +574,7 @@ export default function Dashboard() {
                 style={{ flex: 1, border: 'none', outline: 'none', fontSize: 13, color: '#1C1C1C', background: 'transparent' }} />
               {filterIssue && <button onClick={() => setFilterIssue("")} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 14, padding: 0 }}>✕</button>}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, padding: '6px 12px' }}>
-              <span style={{ fontSize: 12, color: '#6B6B6B', whiteSpace: 'nowrap' }}>Desde</span>
-              <input type="date" value={days[0]} onChange={e => { const d = new Date(e.target.value + "T12:00:00"); setRefDate(d); }}
-                style={{ border: 'none', outline: 'none', fontSize: 12, color: '#1C1C1C', background: 'transparent', cursor: 'pointer' }} />
-              <span style={{ fontSize: 12, color: '#9CA3AF' }}>→</span>
-              <span style={{ fontSize: 12, color: '#6B6B6B', whiteSpace: 'nowrap' }}>Hasta</span>
-              <input type="date" value={days[days.length - 1]} readOnly
-                style={{ border: 'none', outline: 'none', fontSize: 12, color: '#9CA3AF', background: 'transparent' }} />
-            </div>
+           
           </div>
           <div style={{ background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, overflow: 'hidden', flex: 1 }}>
             <div style={{ overflowX: 'auto' }}>

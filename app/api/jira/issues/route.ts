@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
 
     // ── TICKETS POR PROYECTO ───────────────────────────────────────────────
     const jql = encodeURIComponent(`project = "${projectKey}" AND statusCategory != Done ORDER BY issuetype ASC, updated DESC`);
-    const url = `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,status,project,issuetype,parent&maxResults=100`;
+    const url = `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,status,project,issuetype,parent,assignee&maxResults=100`;
     const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
     const data = await response.json();
     const issues = data.issues?.map((issue: any) => ({
@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
       status: issue.fields.status?.name,
       project: issue.fields.project?.name,
       projectKey: issue.fields.project?.key,
+      assigneeId: issue.fields.assignee?.accountId || null,
       issueType: issue.fields.issuetype?.name || "Task",
       parentKey: issue.fields.parent?.key || null,
       parentSummary: issue.fields.parent?.fields?.summary || null,
