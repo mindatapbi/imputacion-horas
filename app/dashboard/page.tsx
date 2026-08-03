@@ -44,9 +44,13 @@ function secsToFmt(s: number): string {
   return `${h}:${String(m).padStart(2, "0")}`;
 }
 function getWeekDays(refDate: Date): string[] {
-  const days: string[] = []; const monday = new Date(refDate);
-  monday.setDate(refDate.getDate() - ((refDate.getDay() + 6) % 7));
-  for (let i = 0; i < 7; i++) { const d = new Date(monday); d.setDate(monday.getDate() + i); days.push(d.toISOString().split("T")[0]); }
+  const days: string[] = [];
+  const monday = new Date(refDate);
+  monday.setDate(refDate.getDate() - ((refDate.getDay() + 6) % 7) - 7);
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(monday); d.setDate(monday.getDate() + i);
+    days.push(d.toISOString().split("T")[0]);
+  }
   return days;
 }
 function getWeekNumber(d: Date): number {
@@ -56,8 +60,13 @@ function getWeekNumber(d: Date): number {
   return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 }
 function fmtWeekLabel(days: string[]): string {
-  const from = new Date(days[0] + "T12:00:00"); const to = new Date(days[6] + "T12:00:00");
-  return `${from.toLocaleDateString("es-AR", { day: "numeric", month: "short" })} – ${to.toLocaleDateString("es-AR", { day: "numeric", month: "short" })}  ·  Sem ${getWeekNumber(from)} · ${to.getFullYear()}`;
+  const from = new Date(days[0] + "T12:00:00");
+  const to = new Date(days[days.length - 1] + "T12:00:00");
+  const fromStr = from.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
+  const toStr = to.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
+  const week1 = getWeekNumber(from);
+  const week2 = getWeekNumber(to);
+  return `${fromStr} – ${toStr}  ·  Sem ${week1}–${week2} · ${to.getFullYear()}`;
 }
 function fmtDayLabel(d: string): string {
   return new Date(d + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
