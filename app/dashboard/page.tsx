@@ -524,12 +524,27 @@ export default function Dashboard() {
               <p style={{ fontSize: 11, color: '#9CA3AF', letterSpacing: '0.08em', margin: '0 0 2px' }}>PASO 1 · <span style={{ color: '#E30613', fontWeight: 700 }}>ELIGE</span> · PASO 2 · <span style={{ color: '#E30613', fontWeight: 700 }}>IMPUTA</span> · PASO 3 · <span style={{ color: '#E30613', fontWeight: 700 }}>GUARDA</span></p>
               <h2 style={{ fontSize: 18, fontWeight: 700, color: '#E30613', margin: 0 }}>Registro de horas</h2>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            
+<div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              {[
+                { label: "Esta semana", fn: () => setRefDate(new Date()) },
+                { label: "Semana pasada", fn: () => { const d = new Date(); d.setDate(d.getDate() - 7); setRefDate(d); } },
+                { label: "Este mes", fn: () => { const d = new Date(); d.setDate(1); setRefDate(d); } },
+                { label: "Mes pasado", fn: () => { const d = new Date(); d.setMonth(d.getMonth() - 1); d.setDate(1); setRefDate(d); } },
+                { label: "Últimas 4 semanas", fn: () => { const d = new Date(); d.setDate(d.getDate() - 27); setRefDate(d); } },
+              ].map(({ label, fn }) => (
+                <button key={label} onClick={fn}
+                  style={{ fontSize: 11, padding: '5px 10px', borderRadius: 3, border: '1px solid #DCDEE0', background: '#fff', color: '#6B6B6B', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  {label}
+                </button>
+              ))}
               <button onClick={prevWeek} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 12 }}>◀</button>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#1C1C1C', minWidth: 240, textAlign: 'center' }}>{fmtWeekLabel(days)}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#1C1C1C', whiteSpace: 'nowrap' }}>{fmtWeekLabel(days)}</span>
               <button onClick={nextWeek} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 12 }}>▶</button>
               <button onClick={goToday} style={{ fontSize: 11, fontWeight: 700, border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 10px', background: '#fff', cursor: 'pointer' }}>Hoy</button>
             </div>
+
+
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, padding: '6px 12px' }}>
