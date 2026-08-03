@@ -43,11 +43,11 @@ function secsToFmt(s: number): string {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
   return `${h}:${String(m).padStart(2, "0")}`;
 }
-function getWeekDays(refDate: Date): string[] {
+function getWeekDays(refDate: Date, twoWeeks = false): string[] {
   const days: string[] = [];
   const monday = new Date(refDate);
-  monday.setDate(refDate.getDate() - ((refDate.getDay() + 6) % 7) - 7);
-  for (let i = 0; i < 14; i++) {
+  monday.setDate(refDate.getDate() - ((refDate.getDay() + 6) % 7) - (twoWeeks ? 7 : 0));
+  for (let i = 0; i < (twoWeeks ? 14 : 7); i++) {
     const d = new Date(monday); d.setDate(monday.getDate() + i);
     days.push(d.toISOString().split("T")[0]);
   }
@@ -235,7 +235,7 @@ function MobileView({ rows, days, today, updateCell, removeRow, handleSave, savi
             return (
               <button key={d} onClick={() => setDayIdx(i)}
                 style={{ flex: 1, padding: '4px 2px', border: `1px solid ${isActive ? '#E30613' : '#DCDEE0'}`, borderRadius: 3, background: isActive ? '#FBEEEE' : '#fff', cursor: 'pointer', textAlign: 'center' }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: isActive ? '#E30613' : we ? '#D1D5DB' : '#9CA3AF', textTransform: 'uppercase' }}>{DAY_LABELS[i]}</div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: isActive ? '#E30613' : we ? '#D1D5DB' : '#9CA3AF', textTransform: 'uppercase' }}>{DAY_LABELS[i % 7]}</div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: isActive ? '#E30613' : we ? '#D1D5DB' : '#1C1C1C' }}>{new Date(d + "T12:00:00").getDate()}</div>
                 {dayHours > 0 && <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#E30613', margin: '2px auto 0' }} />}
               </button>
@@ -358,11 +358,12 @@ export default function Dashboard() {
   const [soloMias, setSoloMias] = useState(true);
 
   // Guardado
+  const [showTwoWeeks, setShowTwoWeeks] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const days = getWeekDays(refDate);
+  const days = getWeekDays(refDate, showTwoWeeks);
   const pendingChanges = rows.some(r => Object.values(r.cells).some(c => c.dirty));
   const filteredRows = rows.filter(r =>
     (!filterProject || r.issue.project === filterProject) &&
@@ -398,9 +399,9 @@ export default function Dashboard() {
     setLoadingIssues(false);
   };
   const fetchWeekData = async () => {
-    const weekDays = getWeekDays(refDate);
+    const weekDays = getWeekDays(refDate, showTwoWeeks);
     setLoading(true); setSaveSuccess(false); setSaveError("");
-    const res = await fetch(`/api/jira/timesheet?from=${weekDays[0]}&to=${weekDays[6]}`);
+    const res = await fetch(`/api/jira/timesheet?from=${weekDays[0]}&to=${weekDays[weekDays.length - 1]}`);
     if (res.status === 401) { setSessionExpired(true); return; }
     if (!res.ok) { setLoading(false); return; }
     const data = await res.json();
@@ -535,18 +536,16 @@ export default function Dashboard() {
             </div>
             
 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              {[
-                { label: "Esta semana", fn: () => setRefDate(new Date()) },
-                { label: "Semana pasada", fn: () => { const d = new Date(); d.setDate(d.getDate() - 7); setRefDate(d); } },
-                { label: "Este mes", fn: () => { const d = new Date(); d.setDate(1); setRefDate(d); } },
-                { label: "Mes pasado", fn: () => { const d = new Date(); d.setMonth(d.getMonth() - 1); d.setDate(1); setRefDate(d); } },
-                { label: "Últimas 4 semanas", fn: () => { const d = new Date(); d.setDate(d.getDate() - 27); setRefDate(d); } },
-              ].map(({ label, fn }) => (
-                <button key={label} onClick={fn}
-                  style={{ fontSize: 11, padding: '5px 10px', borderRadius: 3, border: '1px solid #DCDEE0', background: '#fff', color: '#6B6B6B', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  {label}
-                </button>
-              ))}
+
+             <button onClick={() => { setRefDate(new Date()); setShowTwoWeeks(false); }}
+  style={{ fontSize: 11, padding: '5px 12px', borderRadius: 3, border: `1px solid ${!showTwoWeeks ? '#E30613' : '#DCDEE0'}`, background: !showTwoWeeks ? '#FBEEEE' : '#fff', color: !showTwoWeeks ? '#E30613' : '#6B6B6B', cursor: 'pointer', fontWeight: !showTwoWeeks ? 700 : 400, whiteSpace: 'nowrap' }}>
+  Semana actual
+</button>
+<button onClick={() => { setRefDate(new Date()); setShowTwoWeeks(true); }}
+  style={{ fontSize: 11, padding: '5px 12px', borderRadius: 3, border: `1px solid ${showTwoWeeks ? '#E30613' : '#DCDEE0'}`, background: showTwoWeeks ? '#FBEEEE' : '#fff', color: showTwoWeeks ? '#E30613' : '#6B6B6B', cursor: 'pointer', fontWeight: showTwoWeeks ? 700 : 400, whiteSpace: 'nowrap' }}>
+  + Semana anterior
+</button>
+
               <button onClick={prevWeek} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 12 }}>◀</button>
               <span style={{ fontSize: 12, fontWeight: 700, color: '#1C1C1C', whiteSpace: 'nowrap' }}>{fmtWeekLabel(days)}</span>
               <button onClick={nextWeek} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 12 }}>▶</button>
@@ -568,7 +567,7 @@ export default function Dashboard() {
                 style={{ border: 'none', outline: 'none', fontSize: 12, color: '#1C1C1C', background: 'transparent', cursor: 'pointer' }} />
               <span style={{ fontSize: 12, color: '#9CA3AF' }}>→</span>
               <span style={{ fontSize: 12, color: '#6B6B6B', whiteSpace: 'nowrap' }}>Hasta</span>
-              <input type="date" value={days[6]} readOnly
+              <input type="date" value={days[days.length - 1]} readOnly
                 style={{ border: 'none', outline: 'none', fontSize: 12, color: '#9CA3AF', background: 'transparent' }} />
             </div>
           </div>
@@ -579,7 +578,7 @@ export default function Dashboard() {
                   <tr style={{ background: '#E30613' }}>
                     <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.08em', minWidth: 280, position: 'sticky', left: 0, background: '#E30613', zIndex: 10 }}>Incidencia</th>
                     {days.map((d, i) => (<th key={d} style={{ textAlign: 'center', padding: '8px 4px', minWidth: 72, background: d === today ? '#C00000' : '#E30613', borderLeft: '1px solid rgba(255,255,255,0.15)' }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase' }}>{DAY_LABELS[i]}</div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase' }}>{DAY_LABELS[i % 7]}</div>
                       <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{new Date(d + "T12:00:00").getDate()}</div>
                     </th>))}
                     <th style={{ textAlign: 'center', padding: '8px 10px', minWidth: 70, background: '#C00000', borderLeft: '1px solid rgba(255,255,255,0.15)', fontSize: 11, fontWeight: 700, color: '#fff', textTransform: 'uppercase' }}>Total</th>
