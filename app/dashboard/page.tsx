@@ -223,8 +223,8 @@ function MobileView({ rows, days, today, updateCell, removeRow, handleSave, savi
             <div style={{ fontSize: 15, fontWeight: 700, color: currentDay === today ? '#E30613' : '#1C1C1C', textTransform: 'capitalize' }}>{fmtDayLabel(currentDay)}</div>
             {isWeekend(currentDay) && <div style={{ fontSize: 11, color: '#9CA3AF' }}>Fin de semana</div>}
           </div>
-          <button onClick={() => setDayIdx(Math.min(6, dayIdx + 1))} disabled={dayIdx === 6}
-            style={{ width: 36, height: 36, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 14, opacity: dayIdx === 6 ? 0.4 : 1 }}>▶</button>
+          <button onClick={() => setDayIdx(Math.min(days.length - 1, dayIdx + 1))} disabled={dayIdx === days.length - 1}
+  style={{ width: 36, height: 36, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 14, opacity: dayIdx === days.length - 1 ? 0.4 : 1 }}>▶</button>
         </div>
         {/* Mini semana */}
         <div style={{ display: 'flex', gap: 4 }}>
