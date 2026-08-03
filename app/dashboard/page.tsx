@@ -114,7 +114,7 @@ function EpicGroup({ group, onAdd, rows }: { group: IssueGroup; onAdd: (i: Issue
     <div style={{ marginBottom: 5 }}>
       <button onClick={() => setCollapsed(!collapsed)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6, padding: '5px 6px', borderRadius: 3, background: isEpic ? '#FBEEEE' : '#F9FAFB', border: `1px solid ${isEpic ? 'rgba(212,175,55,0.3)' : '#DCDEE0'}`, cursor: 'pointer', textAlign: 'left' }}>
         <span style={{ fontSize: 10, color: '#9CA3AF', transform: collapsed ? 'rotate(-90deg)' : 'none', display: 'inline-block', transition: 'transform 0.12s' }}>▼</span>
-        {isEpic ? <><span style={{ fontSize: 11 }}>⚡</span><span style={{ fontSize: 11, fontWeight: 700, color: '#1C1C1C', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.parentSummary}</span><span style={{ fontSize: 10, color: '#E30613', fontFamily: 'monospace', fontWeight: 700, flexShrink: 0 }}>{group.parentKey}</span></>
+        {isEpic ? <><span style={{ fontSize: 11 }}>⚡</span><span style={{ fontSize: 11, fontWeight: 700, color: '#E30613', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.parentSummary}</span><span style={{ fontSize: 10, color: '#E30613', fontFamily: 'monospace', fontWeight: 700, flexShrink: 0 }}>{group.parentKey}</span></>
           : <span style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', flex: 1 }}>Sin épica</span>}
         <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 99, background: addedCount > 0 ? '#FBEEEE' : '#F3F4F6', color: addedCount > 0 ? '#E30613' : '#6B6B6B', flexShrink: 0 }}>{addedCount > 0 ? `${addedCount}/` : ""}{group.issues.length}</span>
       </button>
