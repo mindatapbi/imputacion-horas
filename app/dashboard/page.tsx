@@ -359,7 +359,7 @@ export default function Dashboard() {
   const [soloMias, setSoloMias] = useState(true);
 
   // Guardado
-  const [showTwoWeeks, setShowTwoWeeks] = useState(false);
+  const [showTwoWeeks, setShowTwoWeeks] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
