@@ -27,3 +27,14 @@ body {
 input::placeholder {
   color: #1C1C1C !important;
 }
+
+.project-search-input {
+  color: #1C1C1C !important;
+  -webkit-text-fill-color: #1C1C1C !important;
+  opacity: 1 !important;
+}
+
+.project-search-input::placeholder {
+  color: #6B6B6B !important;
+  opacity: 1 !important;
+}
