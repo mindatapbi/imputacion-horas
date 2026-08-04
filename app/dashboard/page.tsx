@@ -93,7 +93,7 @@ function ProjectSelector({ projects, value, onChange }: { projects: Project[]; v
         <span style={{ color: '#9CA3AF', fontSize: 10, flexShrink: 0, marginLeft: 4 }}>{open ? '▲' : '▼'}</span>
       </button>
       {open && <div style={{ position: 'absolute', zIndex: 20, width: '100%', marginTop: 2, background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
-        <div style={{ padding: 6, borderBottom: '1px solid #DCDEE0' }}><input autoFocus type="text" placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} className="project-search-input" style={{ width: '100%', border: '1px solid #E30613', borderRadius: 3, padding: '5px 8px', fontSize: 11, outline: 'none', color: '#1C1C1C' }} /></div>
+        <div style={{ padding: 6, borderBottom: '1px solid #DCDEE0' }}><input autoFocus type="text" placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} className="project-search-input" style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 11, outline: 'none', color: '#1C1C1C' }} /></div>
         <div style={{ maxHeight: 200, overflowY: 'auto' }}>
           {filtered.length === 0 ? <p style={{ padding: '10px', fontSize: 11, color: '#9CA3AF', textAlign: 'center', margin: 0 }}>Sin resultados</p>
             : filtered.map(p => <button key={p.key} onClick={() => { onChange(p.key); setOpen(false); setSearch(""); }} style={{ width: '100%', textAlign: 'left', padding: '7px 10px', fontSize: 11, background: value === p.key ? '#FBEEEE' : 'transparent', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
