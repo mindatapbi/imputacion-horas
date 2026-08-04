@@ -89,7 +89,7 @@ function ProjectSelector({ projects, value, onChange }: { projects: Project[]; v
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button onClick={() => setOpen(!open)} style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '6px 10px', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', cursor: 'pointer' }}>
-        {selected ? <span style={{ color: '#1C1C1C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selected.name} <span style={{ color: '#E30613', fontFamily: 'monospace', fontWeight: 700 }}>({selected.key})</span></span> : <span style={{ color: '#9CA3AF' }}>— Elegí un proyecto —</span>}
+        {selected ? <span style={{ color: '#1C1C1C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selected.name} <span style={{ color: '#E30613', fontFamily: 'monospace', fontWeight: 700 }}>({selected.key})</span></span> : <span style={{ color: '#6B6B6B' }}>— Elegí un proyecto —</span>}
         <span style={{ color: '#9CA3AF', fontSize: 10, flexShrink: 0, marginLeft: 4 }}>{open ? '▲' : '▼'}</span>
       </button>
       {open && <div style={{ position: 'absolute', zIndex: 20, width: '100%', marginTop: 2, background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
@@ -175,8 +175,8 @@ function MobileDrawer({ open, onClose, projects, loadingProjects, rows, onAdd }:
           <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#6B6B6B', margin: '0 0 6px' }}>Proyecto</p>
           {loadingProjects ? <div style={{ fontSize: 12, color: '#9CA3AF' }}>Cargando...</div>
             : <select value={selectedProject} onChange={e => setSelectedProject(e.target.value)}
-                style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '8px 10px', fontSize: 13, outline: 'none', background: '#fff' }}>
-                <option value="">— Elegí un proyecto —</option>
+                style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '8px 10px', fontSize: 13, outline: 'none', background: '#fff', color: '#1C1C1C' }}>
+  <option value="" style={{ color: '#6B6B6B' }}>— Elegí un proyecto —</option>
                 {projects.map(p => <option key={p.key} value={p.key}>{p.name} ({p.key})</option>)}
               </select>}
         </div>
