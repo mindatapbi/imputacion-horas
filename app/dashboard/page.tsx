@@ -631,7 +631,7 @@ export default function Dashboard() {
                             <td key={d} style={{ padding: '4px 3px', textAlign: 'center', borderLeft: '1px solid #F0F0F0', background: we ? '#F5F5F5' : d === today ? '#FFF9F0' : 'transparent', position: 'relative' }}>
                               {we ? <span style={{ color: '#DCDEE0', fontSize: 12 }}>—</span> : (
                                 <>
-                                  <input type="text" value={raw} onChange={e => updateCell(row.issue.key, d, e.target.value)} onBlur={e => { const s = parseToSeconds(e.target.value); updateCell(row.issue.key, d, s > 0 ? secsToDisplay(s) : ""); }} placeholder="0:00"
+                                  <input type="text" value={raw} onChange={e => updateCell(row.issue.key, d, e.target.value)} onBlur={e => { const s = parseToSeconds(e.target.value); updateCell(row.issue.key, d, s > 0 ? secsToDisplay(s) : ""); }} placeholder="—"
                                     style={{ width: '100%', textAlign: 'center', border: secs > 0 ? `1px solid ${isDirty ? 'rgba(212,175,55,0.8)' : 'rgba(212,175,55,0.3)'}` : '1px solid transparent', borderRadius: 3, padding: '5px 3px', fontSize: 13, fontWeight: secs > 0 ? 700 : 400, color: secs > 0 ? '#1C1C1C' : '#DCDEE0', background: secs > 0 ? (isDirty ? '#FFFBEB' : '#FFFDF0') : 'transparent', outline: 'none', cursor: 'text' }}
                                     onFocus={e => { e.currentTarget.style.borderColor = '#E30613'; e.currentTarget.style.background = '#FFF5F5'; }}
                                     onBlurCapture={e => { const s = parseToSeconds(e.currentTarget.value); e.currentTarget.style.borderColor = s > 0 ? 'rgba(212,175,55,0.5)' : 'transparent'; e.currentTarget.style.background = s > 0 ? '#FFFDF0' : 'transparent'; }} />
