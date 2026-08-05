@@ -453,7 +453,8 @@ export default function Dashboard() {
 
   const dayTotals: Record<string, number> = {};
   let weekTotal = 0;
-  for (const day of days) { dayTotals[day] = rows.reduce((acc, r) => acc + (r.cells[day]?.seconds || 0), 0); weekTotal += dayTotals[day]; }
+  const currentWeekDays = getWeekDays(refDate, false);
+  for (const day of days) { dayTotals[day] = rows.reduce((acc, r) => acc + (r.cells[day]?.seconds || 0), 0); if (currentWeekDays.includes(day)) weekTotal += dayTotals[day]; }
   const rowTotals: Record<string, number> = {};
   for (const row of rows) rowTotals[row.issue.key] = days.reduce((acc, d) => acc + (row.cells[d]?.seconds || 0), 0);
   const prevWeek = () => { const d = new Date(refDate); d.setDate(d.getDate() - 7); setRefDate(d); };
