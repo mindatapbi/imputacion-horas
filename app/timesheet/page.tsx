@@ -394,7 +394,7 @@ export default function ConsultarPage() {
             <p style={{ fontSize: 12, color: '#6B6B6B', margin: '3px 0 0' }}>Filtrá, revisá y corregí. Los cambios se aplican registro a registro.</p>
           </div>
           <button onClick={exportExcel} disabled={!filtered.length}
-            style={{ fontSize: 12, fontWeight: 700, color: '#1F7A44', border: '1px solid #1F7A44', borderRadius: 3, padding: '7px 14px', background: '#fff', cursor: filtered.length ? 'pointer' : 'not-allowed', opacity: filtered.length ? 1 : 0.4 }}>
+            style={{ fontSize: 12, fontWeight: 700, color: '#fff', border: '1px solid #E30613', borderRadius: 3, padding: '7px 14px', background: '#E30613', cursor: filtered.length ? 'pointer' : 'not-allowed', opacity: filtered.length ? 1 : 0.4 }}>
             ⬇ Exportar Excel
           </button>
         </div>
