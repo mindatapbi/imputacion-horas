@@ -266,7 +266,7 @@ function MobileView({ rows, days, today, updateCell, removeRow, handleSave, savi
                   <div style={{ minWidth: 0 }}>
                     <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1C1C1C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.issue.summary}</p>
                     <div style={{ display: 'flex', gap: 6, marginTop: 3, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#E30613' }}>{row.issue.key}</span>
+                      <a href={`https://factoriamindata.atlassian.net/browse/${row.issue.key}`} target="_blank" rel="noreferrer" style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#E30613', textDecoration: 'none' }}>{row.issue.key}</a>
                       {row.issue.parentSummary && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#F3F4F6', color: '#6B6B6B', border: '1px solid #DCDEE0' }}>⚡ {row.issue.parentSummary}</span>}
                     </div>
                   </div>
@@ -617,7 +617,7 @@ export default function Dashboard() {
                             {hasDirty && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#E30613', flexShrink: 0, marginTop: 5 }} />}
                             <span style={{ fontSize: 14, marginTop: 1, color: ts.color, flexShrink: 0 }}>{ts.emoji}</span>
                             <div style={{ minWidth: 0 }}>
-                              <div style={{ display: 'flex', gap: 6, marginBottom: 1 }}><span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#E30613' }}>{row.issue.key}</span><span style={{ fontSize: 10, color: '#9CA3AF' }}>{row.issue.issueType}</span></div>
+                              <div style={{ display: 'flex', gap: 6, marginBottom: 1 }}><a href={`https://factoriamindata.atlassian.net/browse/${row.issue.key}`} target="_blank" rel="noreferrer" style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#E30613', textDecoration: 'none' }}>{row.issue.key}</a><span style={{ fontSize: 10, color: '#9CA3AF' }}>{row.issue.issueType}</span></div>
                               <p style={{ margin: 0, fontSize: 12, color: '#1C1C1C', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>{row.issue.summary}</p>
                               <div style={{ display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap' }}>
                                 {row.issue.parentSummary && <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 99, background: '#F3F4F6', color: '#6B6B6B', border: '1px solid #DCDEE0' }}>⚡ {row.issue.parentSummary}</span>}
