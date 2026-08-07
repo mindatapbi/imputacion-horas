@@ -643,9 +643,12 @@ export default function Dashboard() {
                           );
                         })}
                         <td style={{ textAlign: 'center', padding: '6px 6px', borderLeft: '1px solid #F0F0F0', fontWeight: 700, fontSize: 13, color: rowTotal > 0 ? '#1C1C1C' : '#DCDEE0' }}>{rowTotal > 0 ? secsToDisplay(rowTotal) : "—"}</td>
-                        <td style={{ textAlign: 'center', padding: '6px 4px', borderLeft: '1px solid #F0F0F0' }}>
-                          <button onClick={() => removeRow(row.issue.key)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DCDEE0', fontSize: 14 }} onMouseOver={e => e.currentTarget.style.color = '#E30613'} onMouseOut={e => e.currentTarget.style.color = '#DCDEE0'}>✕</button>
-                        </td>
+                        <td style={{ textAlign: 'center', padding: '6px 4px', borderLeft: '1px solid #F0F0F0', whiteSpace: 'nowrap' }}>
+  <a href={`https://factoriamindata.atlassian.net/browse/${row.issue.key}`} target="_blank" rel="noreferrer"
+    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DCDEE0', fontSize: 14, textDecoration: 'none', marginRight: 6 }}
+    onMouseOver={e => e.currentTarget.style.color = '#2563EB'} onMouseOut={e => e.currentTarget.style.color = '#DCDEE0'}>✏</a>
+  <button onClick={() => removeRow(row.issue.key)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DCDEE0', fontSize: 14 }} onMouseOver={e => e.currentTarget.style.color = '#E30613'} onMouseOut={e => e.currentTarget.style.color = '#DCDEE0'}>✕</button>
+</td>
                       </tr>
                     );
                   })}
