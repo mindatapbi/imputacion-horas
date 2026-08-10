@@ -615,7 +615,7 @@ export default function Dashboard() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: '#E30613' }}>
-                    <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.08em', minWidth: 280, position: 'sticky', left: 0, background: '#E30613', zIndex: 10 }}>Incidencia</th>
+                    <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.08em', minWidth: 280, position: 'sticky', left: 0, background: '#E30613', zIndex: 10 }}>Tarea</th>
                     {days.map((d, i) => (<th key={d} style={{ textAlign: 'center', padding: '8px 4px', minWidth: 72, background: d === today ? '#C00000' : '#E30613', borderLeft: '1px solid rgba(255,255,255,0.15)' }}>
                       <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase' }}>{DAY_LABELS[i % 7]}</div>
                       <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{new Date(d + "T12:00:00").getDate()}</div>
