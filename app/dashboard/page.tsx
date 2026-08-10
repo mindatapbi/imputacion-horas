@@ -353,6 +353,7 @@ export default function Dashboard() {
   const [loadingIssues, setLoadingIssues] = useState(false);
   const [issueSearch, setIssueSearch] = useState("");
   const [soloAsignadasAMi, setSoloAsignadasAMi] = useState(false);
+  const [incluirFinalizadas, setIncluirFinalizadas] = useState(false);
 
   const [globalSearch, setGlobalSearch] = useState("");
   const [globalResults, setGlobalResults] = useState<Issue[]>([]);
@@ -371,7 +372,7 @@ export default function Dashboard() {
   useEffect(() => { const check = () => setIsMobile(window.innerWidth < 768); check(); window.addEventListener("resize", check); return () => window.removeEventListener("resize", check); }, []);
   useEffect(() => { fetchUser(); fetchProjects(); }, []);
   useEffect(() => { fetchData(); }, [refDate, viewMode]);
-  useEffect(() => { if (selectedProject) fetchIssues(selectedProject); else setIssues([]); setIssueSearch(""); }, [selectedProject]);
+  useEffect(() => { if (selectedProject) fetchIssues(selectedProject); else setIssues([]); setIssueSearch(""); }, [selectedProject, incluirFinalizadas]);
   useEffect(() => {
     if (!globalSearch.trim()) { setGlobalResults([]); setShowGlobalResults(false); return; }
     const timer = setTimeout(async () => {
@@ -389,7 +390,7 @@ export default function Dashboard() {
 
   const fetchUser = async () => { const res = await fetch("/api/auth/me"); if (res.status === 401) { setSessionExpired(true); return; } if (res.ok) { const data = await res.json(); setUser(data.user); } };
   const fetchProjects = async () => { setLoadingProjects(true); const res = await fetch("/api/jira/issues"); if (res.ok) { const data = await res.json(); setProjects(data.projects || []); } setLoadingProjects(false); };
-  const fetchIssues = async (pk: string) => { setLoadingIssues(true); const res = await fetch(`/api/jira/issues?project=${pk}`); if (res.ok) { const data = await res.json(); setIssues(data.issues || []); } setLoadingIssues(false); };
+  const fetchIssues = async (pk: string) => { setLoadingIssues(true); const res = await fetch(`/api/jira/issues?project=${pk}${incluirFinalizadas ? '&includedone=true' : ''}`); if (res.ok) { const data = await res.json(); setIssues(data.issues || []); } setLoadingIssues(false); };
   const fetchData = async () => {
     const periodDays = viewMode === '30' ? getLastNDays(30) : viewMode === '60' ? getLastNDays(60) : getWeekDays(refDate, viewMode === 'twoWeeks');
     setLoading(true); setSaveSuccess(false); setSaveError("");
@@ -521,14 +522,20 @@ export default function Dashboard() {
                 <input type="text" placeholder="🔍 Filtrar tickets..." value={issueSearch} onChange={e => setIssueSearch(e.target.value)}
                   style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 11, outline: 'none', color: '#1C1C1C', WebkitTextFillColor: '#1C1C1C' }} />
               </div>
-              <div style={{ padding: '6px 10px', borderBottom: '1px solid #DCDEE0' }}>
+             <div style={{ padding: '6px 10px', borderBottom: '1px solid #DCDEE0' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B6B6B', cursor: 'pointer' }}>
                   <input type="checkbox" checked={soloAsignadasAMi} onChange={e => setSoloAsignadasAMi(e.target.checked)} style={{ accentColor: '#E30613', width: 13, height: 13 }} />
                   Solo asignadas a mí
                 </label>
               </div>
+              <div style={{ padding: '6px 10px', borderBottom: '1px solid #DCDEE0' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B6B6B', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={incluirFinalizadas} onChange={e => setIncluirFinalizadas(e.target.checked)} style={{ accentColor: '#E30613', width: 13, height: 13 }} />
+                  Incluir épicas finalizadas
+                </label>
+              </div>
             </>
-          )}
+          )} 
           <div style={{ flex: 1, overflowY: 'auto', padding: 10 }}>
             {loadingIssues ? <div style={{ textAlign: 'center', padding: '20px 0', fontSize: 12, color: '#6B6B6B' }}>Cargando...</div>
               : !selectedProject ? <div style={{ textAlign: 'center', padding: '24px 0' }}><div style={{ fontSize: 28, marginBottom: 6 }}>📁</div><p style={{ fontSize: 12, color: '#9CA3AF', margin: 0 }}>Elegí un proyecto</p></div>
