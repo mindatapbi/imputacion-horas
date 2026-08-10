@@ -574,7 +574,7 @@ export default function Dashboard() {
             <div ref={globalSearchRef} style={{ flex: 1, position: 'relative' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, padding: '6px 12px' }}>
                 <svg style={{ width: 14, height: 14, color: '#9CA3AF', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-                <input type="text" value={globalSearch} onChange={e => setGlobalSearch(e.target.value)} placeholder="Buscar cualquier ticket de Jira..."
+                <input type="text" value={globalSearch} onChange={e => setGlobalSearch(e.target.value)} placeholder="Buscar por clave (ej: JD-106) o por título..."
                   style={{ flex: 1, border: 'none', outline: 'none', fontSize: 13, color: '#1C1C1C', background: 'transparent' }} />
                 {globalSearching && <div style={{ width: 14, height: 14, border: '2px solid #DCDEE0', borderTop: '2px solid #E30613', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />}
                 {globalSearch && !globalSearching && <button onClick={() => { setGlobalSearch(""); setGlobalResults([]); setShowGlobalResults(false); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 14, padding: 0 }}>✕</button>}
