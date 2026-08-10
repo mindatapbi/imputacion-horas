@@ -447,8 +447,7 @@ export default function Dashboard() {
   const currentWeekDays = getWeekDays(refDate, false);
   for (const day of days) {
     dayTotals[day] = rows.reduce((acc, r) => acc + (r.cells[day]?.seconds || 0), 0);
-    if (isExtendedView) { periodTotal += dayTotals[day]; }
-    else { if (currentWeekDays.includes(day)) periodTotal += dayTotals[day]; }
+    if (currentWeekDays.includes(day)) periodTotal += dayTotals[day];
   }
   const rowTotals: Record<string, number> = {};
   for (const row of rows) rowTotals[row.issue.key] = days.reduce((acc, d) => acc + (row.cells[d]?.seconds || 0), 0);
@@ -701,7 +700,7 @@ export default function Dashboard() {
           <div style={{ background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 200 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5 }}>
-                <span style={{ fontSize: 12, color: '#6B6B6B' }}>{isExtendedView ? `Total ${viewMode === '30' ? '30' : '60'} días:` : 'Semana:'}</span>
+                <span style={{ fontSize: 12, color: '#6B6B6B' }}>Semana:</span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: '#1C1C1C' }}>{secsToFmt(periodTotal)}</span>
                 {!isExtendedView && <>
                   <span style={{ fontSize: 12, color: '#9CA3AF' }}>de {secsToFmt(JORNADA_SEMANAL)}</span>
@@ -709,9 +708,9 @@ export default function Dashboard() {
                   {weekRemaining === 0 && <span style={{ fontSize: 12, color: '#10B981', fontWeight: 700 }}>· ✓ Semana completa</span>}
                 </>}
               </div>
-              {!isExtendedView && <div style={{ height: 6, background: '#ECF0F1', borderRadius: 99, overflow: 'hidden' }}>
+              <div style={{ height: 6, background: '#ECF0F1', borderRadius: 99, overflow: 'hidden' }}>
                 <div style={{ height: '100%', background: periodTotal >= JORNADA_SEMANAL ? '#10B981' : '#E30613', width: `${weekPct}%`, transition: 'width 0.3s', borderRadius: 99 }} />
-              </div>}
+             </div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               {saveError && <span style={{ fontSize: 12, color: '#E30613' }}>{saveError}</span>}
