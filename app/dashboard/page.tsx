@@ -7,6 +7,7 @@ interface Issue {
   key: string; summary: string; status: string;
   project: string; projectKey: string; issueType: string;
   parentKey: string | null; parentSummary: string | null;
+  parentStatusCategory: string | null;
 }
 interface WorklogCell {
   worklogId: string | null; seconds: number; raw: string; comment: string; dirty: boolean;
@@ -390,7 +391,7 @@ export default function Dashboard() {
 
   const fetchUser = async () => { const res = await fetch("/api/auth/me"); if (res.status === 401) { setSessionExpired(true); return; } if (res.ok) { const data = await res.json(); setUser(data.user); } };
   const fetchProjects = async () => { setLoadingProjects(true); const res = await fetch("/api/jira/issues"); if (res.ok) { const data = await res.json(); setProjects(data.projects || []); } setLoadingProjects(false); };
-  const fetchIssues = async (pk: string) => { setLoadingIssues(true); const res = await fetch(`/api/jira/issues?project=${pk}${incluirFinalizadas ? '&includedone=true' : ''}`); if (res.ok) { const data = await res.json(); setIssues(data.issues || []); } setLoadingIssues(false); };
+  const fetchIssues = async (pk: string) => { setLoadingIssues(true); const res = await fetch(`/api/jira/issues?project=${pk}${incluirFinalizadas ? '&includedone=true' : ''}`); if (res.ok) { const data = await res.json(); const allIssues = data.issues || []; setIssues(incluirFinalizadas ? allIssues : allIssues.filter((i: any) => i.parentStatusCategory !== 'done')); } setLoadingIssues(false); };
   const fetchData = async () => {
     const periodDays = viewMode === '30' ? getLastNDays(30) : viewMode === '60' ? getLastNDays(60) : getWeekDays(refDate, viewMode === 'twoWeeks');
     setLoading(true); setSaveSuccess(false); setSaveError("");
@@ -402,7 +403,7 @@ export default function Dashboard() {
     const issueMap: Record<string, { issue: Issue; cells: Record<string, WorklogCell> }> = {};
     for (const entry of entries) {
       if (!issueMap[entry.issueKey]) {
-        issueMap[entry.issueKey] = { issue: { key: entry.issueKey, summary: entry.issueSummary, status: entry.status || "", project: entry.project, projectKey: entry.projectKey, issueType: entry.issueType, parentKey: entry.parentKey, parentSummary: entry.parentSummary }, cells: {} };
+        issueMap[entry.issueKey] = { issue: { key: entry.issueKey, summary: entry.issueSummary, status: entry.status || "", project: entry.project, projectKey: entry.projectKey, issueType: entry.issueType, parentKey: entry.parentKey, parentSummary: entry.parentSummary, parentStatusCategory: null }, cells: {} };
       }
       const existing = issueMap[entry.issueKey].cells[entry.date];
       if (existing) { existing.seconds += entry.timeSpentSeconds; existing.raw = secsToDisplay(existing.seconds); }
