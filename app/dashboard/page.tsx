@@ -53,6 +53,16 @@ function getWeekDays(refDate: Date, twoWeeks = false): string[] {
   }
   return days;
 }
+function getLastNDays(n: number): string[] {
+  const days: string[] = [];
+  const today = new Date();
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    days.push(d.toISOString().split("T")[0]);
+  }
+  return days;
+}
 function getWeekNumber(d: Date): number {
   const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const dayNum = date.getUTCDay() || 7; date.setUTCDate(date.getUTCDate() + 4 - dayNum);
@@ -66,7 +76,8 @@ function fmtWeekLabel(days: string[]): string {
   const toStr = to.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
   const week1 = getWeekNumber(from);
   const week2 = getWeekNumber(to);
-  return `${fromStr} – ${toStr}  ·  Sem ${week1}–${week2} · ${to.getFullYear()}`;
+  if (days.length <= 14) return `${fromStr} – ${toStr}  ·  Sem ${week1}–${week2} · ${to.getFullYear()}`;
+  return `${fromStr} – ${toStr} · ${to.getFullYear()}`;
 }
 function fmtDayLabel(d: string): string {
   return new Date(d + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
@@ -80,7 +91,8 @@ function groupIssues(issues: Issue[]): IssueGroup[] {
 const DAY_LABELS = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
 const JORNADA_SEMANAL = 40 * 3600;
 
-// ─── DESKTOP: Panel izquierdo ─────────────────────────────────────────────────
+type ViewMode = 'week' | 'twoWeeks' | '30' | '60';
+
 function ProjectSelector({ projects, value, onChange }: { projects: Project[]; value: string; onChange: (k: string) => void }) {
   const [search, setSearch] = useState(""); const [open, setOpen] = useState(false); const ref = useRef<HTMLDivElement>(null);
   const selected = projects.find(p => p.key === value);
@@ -141,7 +153,6 @@ function EpicGroup({ group, onAdd, rows }: { group: IssueGroup; onAdd: (i: Issue
   );
 }
 
-// ─── MOBILE: Drawer ───────────────────────────────────────────────────────────
 function MobileDrawer({ open, onClose, projects, loadingProjects, rows, onAdd }: {
   open: boolean; onClose: () => void;
   projects: Project[]; loadingProjects: boolean;
@@ -197,7 +208,6 @@ function MobileDrawer({ open, onClose, projects, loadingProjects, rows, onAdd }:
   );
 }
 
-// ─── MOBILE: Vista por día ────────────────────────────────────────────────────
 function MobileView({ rows, days, today, updateCell, removeRow, handleSave, saving, pendingChanges, saveSuccess, saveError, weekTotal }: {
   rows: RowEntry[]; days: string[]; today: string;
   updateCell: (key: string, date: string, raw: string) => void;
@@ -225,14 +235,14 @@ function MobileView({ rows, days, today, updateCell, removeRow, handleSave, savi
           <button onClick={() => setDayIdx(Math.min(days.length - 1, dayIdx + 1))} disabled={dayIdx === days.length - 1}
             style={{ width: 36, height: 36, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 14, opacity: dayIdx === days.length - 1 ? 0.4 : 1 }}>▶</button>
         </div>
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 4, overflowX: 'auto' }}>
           {days.map((d, i) => {
             const dayHours = rows.reduce((acc, r) => acc + (r.cells[d]?.seconds || 0), 0);
             const isActive = i === dayIdx;
             const we = isWeekend(d);
             return (
               <button key={d} onClick={() => setDayIdx(i)}
-                style={{ flex: 1, padding: '4px 2px', border: `1px solid ${isActive ? '#E30613' : '#DCDEE0'}`, borderRadius: 3, background: isActive ? '#FBEEEE' : '#fff', cursor: 'pointer', textAlign: 'center' }}>
+                style={{ flexShrink: 0, padding: '4px 6px', border: `1px solid ${isActive ? '#E30613' : '#DCDEE0'}`, borderRadius: 3, background: isActive ? '#FBEEEE' : '#fff', cursor: 'pointer', textAlign: 'center' }}>
                 <div style={{ fontSize: 9, fontWeight: 700, color: isActive ? '#E30613' : we ? '#D1D5DB' : '#9CA3AF', textTransform: 'uppercase' }}>{DAY_LABELS[i % 7]}</div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: isActive ? '#E30613' : we ? '#D1D5DB' : '#1C1C1C' }}>{new Date(d + "T12:00:00").getDate()}</div>
                 {dayHours > 0 && <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#E30613', margin: '2px auto 0' }} />}
@@ -322,12 +332,12 @@ function MobileView({ rows, days, today, updateCell, removeRow, handleSave, savi
   );
 }
 
-// ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const now = new Date();
   const today = now.toISOString().split("T")[0];
 
   const [refDate, setRefDate] = useState(now);
+  const [viewMode, setViewMode] = useState<ViewMode>('twoWeeks');
   const [rows, setRows] = useState<RowEntry[]>([]);
   const [user, setUser] = useState<{ accountId: string; displayName: string; email: string; avatarUrl: string } | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
@@ -336,7 +346,6 @@ export default function Dashboard() {
   const [isMobile, setIsMobile] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Desktop panel
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState("");
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -345,31 +354,24 @@ export default function Dashboard() {
   const [issueSearch, setIssueSearch] = useState("");
   const [soloAsignadasAMi, setSoloAsignadasAMi] = useState(false);
 
-  // Búsqueda global
   const [globalSearch, setGlobalSearch] = useState("");
   const [globalResults, setGlobalResults] = useState<Issue[]>([]);
   const [globalSearching, setGlobalSearching] = useState(false);
   const [showGlobalResults, setShowGlobalResults] = useState(false);
   const globalSearchRef = useRef<HTMLDivElement>(null);
 
-  // Guardado
-  const [showTwoWeeks, setShowTwoWeeks] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const days = getWeekDays(refDate, showTwoWeeks);
+  const isExtendedView = viewMode === '30' || viewMode === '60';
+  const days = viewMode === '30' ? getLastNDays(30) : viewMode === '60' ? getLastNDays(60) : getWeekDays(refDate, viewMode === 'twoWeeks');
   const pendingChanges = rows.some(r => Object.values(r.cells).some(c => c.dirty));
 
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
-    check(); window.addEventListener("resize", check); return () => window.removeEventListener("resize", check);
-  }, []);
-
+  useEffect(() => { const check = () => setIsMobile(window.innerWidth < 768); check(); window.addEventListener("resize", check); return () => window.removeEventListener("resize", check); }, []);
   useEffect(() => { fetchUser(); fetchProjects(); }, []);
-  useEffect(() => { fetchWeekData(); }, [refDate]);
+  useEffect(() => { fetchData(); }, [refDate, viewMode]);
   useEffect(() => { if (selectedProject) fetchIssues(selectedProject); else setIssues([]); setIssueSearch(""); }, [selectedProject]);
-
   useEffect(() => {
     if (!globalSearch.trim()) { setGlobalResults([]); setShowGlobalResults(false); return; }
     const timer = setTimeout(async () => {
@@ -380,33 +382,18 @@ export default function Dashboard() {
     }, 400);
     return () => clearTimeout(timer);
   }, [globalSearch]);
-
   useEffect(() => {
     const h = (e: MouseEvent) => { if (globalSearchRef.current && !globalSearchRef.current.contains(e.target as Node)) setShowGlobalResults(false); };
     document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  const fetchUser = async () => {
-    const res = await fetch("/api/auth/me");
-    if (res.status === 401) { setSessionExpired(true); return; }
-    if (res.ok) { const data = await res.json(); setUser(data.user); }
-  };
-  const fetchProjects = async () => {
-    setLoadingProjects(true);
-    const res = await fetch("/api/jira/issues");
-    if (res.ok) { const data = await res.json(); setProjects(data.projects || []); }
-    setLoadingProjects(false);
-  };
-  const fetchIssues = async (pk: string) => {
-    setLoadingIssues(true);
-    const res = await fetch(`/api/jira/issues?project=${pk}`);
-    if (res.ok) { const data = await res.json(); setIssues(data.issues || []); }
-    setLoadingIssues(false);
-  };
-  const fetchWeekData = async () => {
-    const weekDays = getWeekDays(refDate, showTwoWeeks);
+  const fetchUser = async () => { const res = await fetch("/api/auth/me"); if (res.status === 401) { setSessionExpired(true); return; } if (res.ok) { const data = await res.json(); setUser(data.user); } };
+  const fetchProjects = async () => { setLoadingProjects(true); const res = await fetch("/api/jira/issues"); if (res.ok) { const data = await res.json(); setProjects(data.projects || []); } setLoadingProjects(false); };
+  const fetchIssues = async (pk: string) => { setLoadingIssues(true); const res = await fetch(`/api/jira/issues?project=${pk}`); if (res.ok) { const data = await res.json(); setIssues(data.issues || []); } setLoadingIssues(false); };
+  const fetchData = async () => {
+    const periodDays = viewMode === '30' ? getLastNDays(30) : viewMode === '60' ? getLastNDays(60) : getWeekDays(refDate, viewMode === 'twoWeeks');
     setLoading(true); setSaveSuccess(false); setSaveError("");
-    const res = await fetch(`/api/jira/timesheet?from=${weekDays[0]}&to=${weekDays[weekDays.length - 1]}`);
+    const res = await fetch(`/api/jira/timesheet?from=${periodDays[0]}&to=${periodDays[periodDays.length - 1]}`);
     if (res.status === 401) { setSessionExpired(true); return; }
     if (!res.ok) { setLoading(false); return; }
     const data = await res.json();
@@ -444,7 +431,7 @@ export default function Dashboard() {
       }
     }
     if (errors.length > 0) setSaveError(`No se pudieron guardar: ${[...new Set(errors)].join(", ")}`);
-    else { setSaveSuccess(true); await fetchWeekData(); }
+    else { setSaveSuccess(true); await fetchData(); }
     setSaving(false);
   };
   const handleTimerStop = (seconds: number, ticketKey: string, ticketSummary: string) => {
@@ -456,22 +443,33 @@ export default function Dashboard() {
   };
 
   const dayTotals: Record<string, number> = {};
-  let weekTotal = 0;
+  let periodTotal = 0;
   const currentWeekDays = getWeekDays(refDate, false);
-  for (const day of days) { dayTotals[day] = rows.reduce((acc, r) => acc + (r.cells[day]?.seconds || 0), 0); if (currentWeekDays.includes(day)) weekTotal += dayTotals[day]; }
+  for (const day of days) {
+    dayTotals[day] = rows.reduce((acc, r) => acc + (r.cells[day]?.seconds || 0), 0);
+    if (isExtendedView) { periodTotal += dayTotals[day]; }
+    else { if (currentWeekDays.includes(day)) periodTotal += dayTotals[day]; }
+  }
   const rowTotals: Record<string, number> = {};
   for (const row of rows) rowTotals[row.issue.key] = days.reduce((acc, d) => acc + (row.cells[d]?.seconds || 0), 0);
   const prevWeek = () => { const d = new Date(refDate); d.setDate(d.getDate() - 7); setRefDate(d); };
   const nextWeek = () => { const d = new Date(refDate); d.setDate(d.getDate() + 7); setRefDate(d); };
-  const goToday = () => setRefDate(new Date());
   const isWeekend = (d: string) => { const dow = new Date(d + "T12:00:00").getDay(); return dow === 0 || dow === 6; };
-  const weekRemaining = Math.max(JORNADA_SEMANAL - weekTotal, 0);
-  const weekPct = Math.min((weekTotal / JORNADA_SEMANAL) * 100, 100);
+  const weekRemaining = Math.max(JORNADA_SEMANAL - periodTotal, 0);
+  const weekPct = Math.min((periodTotal / JORNADA_SEMANAL) * 100, 100);
   const filteredIssues = issues.filter(i =>
     (i.summary.toLowerCase().includes(issueSearch.toLowerCase()) || i.key.toLowerCase().includes(issueSearch.toLowerCase())) &&
     (!soloAsignadasAMi || (i as any).assigneeId === user?.accountId)
   );
   const groups = groupIssues(filteredIssues);
+
+  const btnStyle = (active: boolean) => ({
+    fontSize: 11, padding: '5px 12px', borderRadius: 3,
+    border: `1px solid ${active ? '#E30613' : '#DCDEE0'}`,
+    background: active ? '#FBEEEE' : '#fff',
+    color: active ? '#E30613' : '#6B6B6B',
+    cursor: 'pointer' as const, fontWeight: active ? 700 : 400, whiteSpace: 'nowrap' as const
+  });
 
   if (sessionExpired) return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
@@ -482,31 +480,27 @@ export default function Dashboard() {
     </div>
   );
 
-  // ─── MOBILE LAYOUT ────────────────────────────────────────────────────────
   if (isMobile) return (
     <main style={{ minHeight: '100vh', background: '#ECF0F1', fontFamily: 'Arial, sans-serif', display: 'flex', flexDirection: 'column' }}>
       <AppHeader user={user} activeTab="dashboard" onTimerStop={handleTimerStop} activeTimerTicket={activeTimerTicket} />
       {loading ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#9CA3AF', fontSize: 13 }}>
-          <div style={{ width: 16, height: 16, border: '2px solid #DCDEE0', borderTop: '2px solid #E30613', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-          Cargando semana...
+          <div style={{ width: 16, height: 16, border: '2px solid #DCDEE0', borderTop: '2px solid #E30613', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />Cargando...
         </div>
       ) : (
         <MobileView rows={rows} days={days} today={today} updateCell={updateCell} removeRow={removeRow}
           handleSave={handleSave} saving={saving} pendingChanges={pendingChanges}
-          saveSuccess={saveSuccess} saveError={saveError} weekTotal={weekTotal} />
+          saveSuccess={saveSuccess} saveError={saveError} weekTotal={periodTotal} />
       )}
       <button onClick={() => setDrawerOpen(true)}
         style={{ position: 'fixed', bottom: 80, right: 16, background: '#E30613', color: '#fff', border: 'none', borderRadius: 24, padding: '12px 20px', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 16px rgba(227,6,19,0.4)', zIndex: 40, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 20, fontWeight: 300, lineHeight: 1 }}>+</span>
-        Más tickets
+        <span style={{ fontSize: 20, fontWeight: 300, lineHeight: 1 }}>+</span>Más tickets
       </button>
       <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} projects={projects} loadingProjects={loadingProjects} rows={rows} onAdd={i => { addIssue(i); }} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </main>
   );
 
-  // ─── DESKTOP LAYOUT ───────────────────────────────────────────────────────
   return (
     <main style={{ minHeight: '100vh', background: '#ECF0F1', fontFamily: 'Arial, sans-serif', display: 'flex', flexDirection: 'column' }}>
       <AppHeader user={user} activeTab="dashboard" onTimerStop={handleTimerStop} activeTimerTicket={activeTimerTicket} />
@@ -530,8 +524,7 @@ export default function Dashboard() {
               </div>
               <div style={{ padding: '6px 10px', borderBottom: '1px solid #DCDEE0' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B6B6B', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={soloAsignadasAMi} onChange={e => setSoloAsignadasAMi(e.target.checked)}
-                    style={{ accentColor: '#E30613', width: 13, height: 13 }} />
+                  <input type="checkbox" checked={soloAsignadasAMi} onChange={e => setSoloAsignadasAMi(e.target.checked)} style={{ accentColor: '#E30613', width: 13, height: 13 }} />
                   Solo asignadas a mí
                 </label>
               </div>
@@ -547,25 +540,24 @@ export default function Dashboard() {
 
         {/* PANEL DERECHO */}
         <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', padding: 16, gap: 12 }}>
-          {/* Fila 1: título + botones semana */}
+          {/* Fila 1: título + botones */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <div>
               <p style={{ fontSize: 11, color: '#9CA3AF', letterSpacing: '0.08em', margin: '0 0 2px' }}>PASO 1 · <span style={{ color: '#E30613', fontWeight: 700 }}>ELIGE</span> · PASO 2 · <span style={{ color: '#E30613', fontWeight: 700 }}>IMPUTA</span> · PASO 3 · <span style={{ color: '#E30613', fontWeight: 700 }}>GUARDA</span></p>
               <h2 style={{ fontSize: 18, fontWeight: 700, color: '#E30613', margin: 0 }}>Registro de horas</h2>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <button onClick={() => { setRefDate(new Date()); setShowTwoWeeks(false); }}
-                style={{ fontSize: 11, padding: '5px 12px', borderRadius: 3, border: `1px solid ${!showTwoWeeks ? '#E30613' : '#DCDEE0'}`, background: !showTwoWeeks ? '#FBEEEE' : '#fff', color: !showTwoWeeks ? '#E30613' : '#6B6B6B', cursor: 'pointer', fontWeight: !showTwoWeeks ? 700 : 400, whiteSpace: 'nowrap' }}>
-                Semana actual
-              </button>
-              <button onClick={() => { setRefDate(new Date()); setShowTwoWeeks(true); }}
-                style={{ fontSize: 11, padding: '5px 12px', borderRadius: 3, border: `1px solid ${showTwoWeeks ? '#E30613' : '#DCDEE0'}`, background: showTwoWeeks ? '#FBEEEE' : '#fff', color: showTwoWeeks ? '#E30613' : '#6B6B6B', cursor: 'pointer', fontWeight: showTwoWeeks ? 700 : 400, whiteSpace: 'nowrap' }}>
-                + Semana anterior
-              </button>
-              <button onClick={prevWeek} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 12 }}>◀</button>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#1C1C1C', whiteSpace: 'nowrap' }}>{fmtWeekLabel(days)}</span>
-              <button onClick={nextWeek} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 12 }}>▶</button>
-              <button onClick={goToday} style={{ fontSize: 11, fontWeight: 700, border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 10px', background: '#fff', cursor: 'pointer' }}>Hoy</button>
+              <button onClick={() => { setViewMode('week'); setRefDate(new Date()); }} style={btnStyle(viewMode === 'week')}>Semana actual</button>
+              <button onClick={() => { setViewMode('twoWeeks'); setRefDate(new Date()); }} style={btnStyle(viewMode === 'twoWeeks')}>+ Sem anterior</button>
+              <button onClick={() => setViewMode('30')} style={btnStyle(viewMode === '30')}>Últimos 30 días</button>
+              <button onClick={() => setViewMode('60')} style={btnStyle(viewMode === '60')}>Últimos 60 días</button>
+              {!isExtendedView && <>
+                <button onClick={prevWeek} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 12 }}>◀</button>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#1C1C1C', whiteSpace: 'nowrap' }}>{fmtWeekLabel(days)}</span>
+                <button onClick={nextWeek} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 12 }}>▶</button>
+                <button onClick={() => setRefDate(new Date())} style={{ fontSize: 11, fontWeight: 700, border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 10px', background: '#fff', cursor: 'pointer' }}>Hoy</button>
+              </>}
+              {isExtendedView && <span style={{ fontSize: 12, fontWeight: 700, color: '#1C1C1C', whiteSpace: 'nowrap' }}>{fmtWeekLabel(days)}</span>}
             </div>
           </div>
 
@@ -616,9 +608,10 @@ export default function Dashboard() {
                 <thead>
                   <tr style={{ background: '#E30613' }}>
                     <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.08em', minWidth: 280, position: 'sticky', left: 0, background: '#E30613', zIndex: 10 }}>Tarea</th>
-                    {days.map((d, i) => (<th key={d} style={{ textAlign: 'center', padding: '8px 4px', minWidth: 72, background: d === today ? '#C00000' : '#E30613', borderLeft: '1px solid rgba(255,255,255,0.15)' }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase' }}>{DAY_LABELS[i % 7]}</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{new Date(d + "T12:00:00").getDate()}</div>
+                    {days.map((d, i) => (<th key={d} style={{ textAlign: 'center', padding: '6px 2px', minWidth: isExtendedView ? 52 : 62, background: d === today ? '#C00000' : '#E30613', borderLeft: '1px solid rgba(255,255,255,0.15)' }}>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase' }}>{DAY_LABELS[i % 7]}</div>
+                      <div style={{ fontSize: isExtendedView ? 11 : 13, fontWeight: 700, color: '#fff' }}>{new Date(d + "T12:00:00").getDate()}</div>
+                      {isExtendedView && <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.7)' }}>{new Date(d + "T12:00:00").toLocaleDateString("es-AR", { month: "short" })}</div>}
                     </th>))}
                     <th style={{ textAlign: 'center', padding: '8px 10px', minWidth: 70, background: '#C00000', borderLeft: '1px solid rgba(255,255,255,0.15)', fontSize: 11, fontWeight: 700, color: '#fff', textTransform: 'uppercase' }}>Total</th>
                     <th style={{ width: 36, background: '#E30613', borderLeft: '1px solid rgba(255,255,255,0.15)' }}></th>
@@ -634,11 +627,9 @@ export default function Dashboard() {
                   ) : rows.length === 0 ? (
                     <tr><td colSpan={days.length + 3} style={{ textAlign: 'center', padding: '48px 16px', color: '#9CA3AF' }}>
                       <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
-                      <p style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>No hay registros esta semana</p>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>No hay registros en este período</p>
                       <p style={{ margin: '4px 0 0', fontSize: 12 }}>Elegí un proyecto en el panel izquierdo y agregá tickets</p>
                     </td></tr>
-                  ) : rows.length === 0 ? (
-                    <tr><td colSpan={days.length + 3} style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF', fontSize: 13 }}>No hay resultados</td></tr>
                   ) : rows.map((row, ri) => {
                     const ts = ISSUE_TYPE_STYLES[row.issue.issueType] || { emoji: "📄", color: "#9CA3AF" };
                     const rowTotal = rowTotals[row.issue.key] || 0;
@@ -665,14 +656,14 @@ export default function Dashboard() {
                         {days.map(d => {
                           const cell = row.cells[d]; const secs = cell?.seconds || 0; const raw = cell?.raw ?? ""; const we = isWeekend(d); const isDirty = cell?.dirty || false;
                           return (
-                            <td key={d} style={{ padding: '4px 3px', textAlign: 'center', borderLeft: '1px solid #F0F0F0', background: we ? '#F5F5F5' : d === today ? '#FFF9F0' : 'transparent', position: 'relative' }}>
-                              {we ? <span style={{ color: '#DCDEE0', fontSize: 12 }}>—</span> : (
+                            <td key={d} style={{ padding: '4px 2px', textAlign: 'center', borderLeft: '1px solid #F0F0F0', background: we ? '#F5F5F5' : d === today ? '#FFF9F0' : 'transparent', position: 'relative' }}>
+                              {we ? <span style={{ color: '#DCDEE0', fontSize: 11 }}>—</span> : (
                                 <>
                                   <input type="text" value={raw} onChange={e => updateCell(row.issue.key, d, e.target.value)} onBlur={e => { const s = parseToSeconds(e.target.value); updateCell(row.issue.key, d, s > 0 ? secsToDisplay(s) : ""); }} placeholder="—"
-                                    style={{ width: '100%', textAlign: 'center', border: secs > 0 ? `1px solid ${isDirty ? 'rgba(212,175,55,0.8)' : 'rgba(212,175,55,0.3)'}` : '1px solid transparent', borderRadius: 3, padding: '5px 3px', fontSize: 13, fontWeight: secs > 0 ? 700 : 400, color: secs > 0 ? '#1C1C1C' : '#DCDEE0', background: secs > 0 ? (isDirty ? '#FFFBEB' : '#FFFDF0') : 'transparent', outline: 'none', cursor: 'text' }}
+                                    style={{ width: '100%', textAlign: 'center', border: secs > 0 ? `1px solid ${isDirty ? 'rgba(212,175,55,0.8)' : 'rgba(212,175,55,0.3)'}` : '1px solid transparent', borderRadius: 3, padding: isExtendedView ? '4px 1px' : '5px 3px', fontSize: isExtendedView ? 11 : 13, fontWeight: secs > 0 ? 700 : 400, color: secs > 0 ? '#1C1C1C' : '#DCDEE0', background: secs > 0 ? (isDirty ? '#FFFBEB' : '#FFFDF0') : 'transparent', outline: 'none', cursor: 'text' }}
                                     onFocus={e => { e.currentTarget.style.borderColor = '#E30613'; e.currentTarget.style.background = '#FFF5F5'; }}
                                     onBlurCapture={e => { const s = parseToSeconds(e.currentTarget.value); e.currentTarget.style.borderColor = s > 0 ? 'rgba(212,175,55,0.5)' : 'transparent'; e.currentTarget.style.background = s > 0 ? '#FFFDF0' : 'transparent'; }} />
-                                  {secs > 0 && <div style={{ position: 'absolute', top: 2, right: 3, width: 5, height: 5, borderRadius: '50%', background: isDirty ? '#F59E0B' : '#10B981' }} />}
+                                  {secs > 0 && <div style={{ position: 'absolute', top: 2, right: 2, width: 4, height: 4, borderRadius: '50%', background: isDirty ? '#F59E0B' : '#10B981' }} />}
                                 </>
                               )}
                             </td>
@@ -691,12 +682,12 @@ export default function Dashboard() {
                     <tr style={{ background: '#1C1C1C', borderTop: '2px solid rgba(212,175,55,0.4)' }}>
                       <td style={{ padding: '8px 14px', position: 'sticky', left: 0, background: '#1C1C1C', zIndex: 5, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Total del día</td>
                       {days.map(d => { const s = dayTotals[d] || 0; const we = isWeekend(d); const isOver = s > 8 * 3600; const isFull = s >= 8 * 3600;
-                        return <td key={d} style={{ textAlign: 'center', padding: '8px 3px', borderLeft: '1px solid rgba(255,255,255,0.08)', opacity: we ? 0.3 : 1 }}>
-                          {s > 0 ? <span style={{ fontSize: 13, fontWeight: 700, color: isOver ? '#EF4444' : isFull ? '#10B981' : '#F59E0B' }}>{isOver ? '⚠ ' : ''}{secsToDisplay(s)}</span> : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>—</span>}
+                        return <td key={d} style={{ textAlign: 'center', padding: '8px 2px', borderLeft: '1px solid rgba(255,255,255,0.08)', opacity: we ? 0.3 : 1 }}>
+                          {s > 0 ? <span style={{ fontSize: isExtendedView ? 10 : 12, fontWeight: 700, color: isOver ? '#EF4444' : isFull ? '#10B981' : '#F59E0B' }}>{isOver ? '⚠' : ''}{secsToDisplay(s)}</span> : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 11 }}>—</span>}
                         </td>;
                       })}
-                      <td style={{ textAlign: 'center', padding: '8px', borderLeft: '1px solid rgba(255,255,255,0.08)', background: weekTotal >= JORNADA_SEMANAL ? '#1F4A2A' : '#1C1C1C' }}>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: weekTotal >= JORNADA_SEMANAL ? '#10B981' : '#fff' }}>{secsToDisplay(weekTotal) || '0h'}</span>
+                      <td style={{ textAlign: 'center', padding: '8px', borderLeft: '1px solid rgba(255,255,255,0.08)', background: '#1C1C1C' }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{secsToDisplay(periodTotal) || '0h'}</span>
                       </td>
                       <td style={{ borderLeft: '1px solid rgba(255,255,255,0.08)' }}></td>
                     </tr>
@@ -710,15 +701,17 @@ export default function Dashboard() {
           <div style={{ background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 200 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5 }}>
-                <span style={{ fontSize: 12, color: '#6B6B6B' }}>Semana:</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#1C1C1C' }}>{secsToFmt(weekTotal)}</span>
-                <span style={{ fontSize: 12, color: '#9CA3AF' }}>de {secsToFmt(JORNADA_SEMANAL)}</span>
-                {weekRemaining > 0 && <span style={{ fontSize: 12, color: '#E30613' }}>· faltan {secsToFmt(weekRemaining)}</span>}
-                {weekRemaining === 0 && <span style={{ fontSize: 12, color: '#10B981', fontWeight: 700 }}>· ✓ Semana completa</span>}
+                <span style={{ fontSize: 12, color: '#6B6B6B' }}>{isExtendedView ? `Total ${viewMode === '30' ? '30' : '60'} días:` : 'Semana:'}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#1C1C1C' }}>{secsToFmt(periodTotal)}</span>
+                {!isExtendedView && <>
+                  <span style={{ fontSize: 12, color: '#9CA3AF' }}>de {secsToFmt(JORNADA_SEMANAL)}</span>
+                  {weekRemaining > 0 && <span style={{ fontSize: 12, color: '#E30613' }}>· faltan {secsToFmt(weekRemaining)}</span>}
+                  {weekRemaining === 0 && <span style={{ fontSize: 12, color: '#10B981', fontWeight: 700 }}>· ✓ Semana completa</span>}
+                </>}
               </div>
-              <div style={{ height: 6, background: '#ECF0F1', borderRadius: 99, overflow: 'hidden' }}>
-                <div style={{ height: '100%', background: weekTotal >= JORNADA_SEMANAL ? '#10B981' : '#E30613', width: `${weekPct}%`, transition: 'width 0.3s', borderRadius: 99 }} />
-              </div>
+              {!isExtendedView && <div style={{ height: 6, background: '#ECF0F1', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{ height: '100%', background: periodTotal >= JORNADA_SEMANAL ? '#10B981' : '#E30613', width: `${weekPct}%`, transition: 'width 0.3s', borderRadius: 99 }} />
+              </div>}
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               {saveError && <span style={{ fontSize: 12, color: '#E30613' }}>{saveError}</span>}
