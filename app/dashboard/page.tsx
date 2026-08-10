@@ -176,7 +176,7 @@ function MobileDrawer({ open, onClose, projects, loadingProjects, rows, onAdd }:
           {loadingProjects ? <div style={{ fontSize: 12, color: '#9CA3AF' }}>Cargando...</div>
             : <select value={selectedProject} onChange={e => setSelectedProject(e.target.value)}
                 style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '8px 10px', fontSize: 13, outline: 'none', background: '#fff', color: '#1C1C1C' }}>
-  <option value="" style={{ color: '#6B6B6B' }}>— Elegí un proyecto —</option>
+                <option value="" style={{ color: '#6B6B6B' }}>— Elegí un proyecto —</option>
                 {projects.map(p => <option key={p.key} value={p.key}>{p.name} ({p.key})</option>)}
               </select>}
         </div>
@@ -214,7 +214,6 @@ function MobileView({ rows, days, today, updateCell, removeRow, handleSave, savi
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-      {/* Selector de día */}
       <div style={{ background: '#fff', borderBottom: '1px solid #DCDEE0', padding: '10px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
           <button onClick={() => setDayIdx(Math.max(0, dayIdx - 1))} disabled={dayIdx === 0}
@@ -224,9 +223,8 @@ function MobileView({ rows, days, today, updateCell, removeRow, handleSave, savi
             {isWeekend(currentDay) && <div style={{ fontSize: 11, color: '#9CA3AF' }}>Fin de semana</div>}
           </div>
           <button onClick={() => setDayIdx(Math.min(days.length - 1, dayIdx + 1))} disabled={dayIdx === days.length - 1}
-  style={{ width: 36, height: 36, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 14, opacity: dayIdx === days.length - 1 ? 0.4 : 1 }}>▶</button>
+            style={{ width: 36, height: 36, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 14, opacity: dayIdx === days.length - 1 ? 0.4 : 1 }}>▶</button>
         </div>
-        {/* Mini semana */}
         <div style={{ display: 'flex', gap: 4 }}>
           {days.map((d, i) => {
             const dayHours = rows.reduce((acc, r) => acc + (r.cells[d]?.seconds || 0), 0);
@@ -244,7 +242,6 @@ function MobileView({ rows, days, today, updateCell, removeRow, handleSave, savi
         </div>
       </div>
 
-      {/* Lista de tickets del día */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {rows.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '48px 0' }}>
@@ -278,7 +275,6 @@ function MobileView({ rows, days, today, updateCell, removeRow, handleSave, savi
                     onTouchStart={e => e.currentTarget.style.color = '#E30613'} onTouchEnd={e => e.currentTarget.style.color = '#DCDEE0'}>✕</button>
                 </div>
               </div>
-              {/* Input de horas */}
               {isWeekend(currentDay) ? (
                 <div style={{ textAlign: 'center', fontSize: 12, color: '#9CA3AF', padding: '6px 0' }}>Fin de semana</div>
               ) : (
@@ -300,11 +296,9 @@ function MobileView({ rows, days, today, updateCell, removeRow, handleSave, savi
             </div>
           );
         })}
-        {/* Espacio para el FAB */}
         <div style={{ height: 80 }} />
       </div>
 
-      {/* Total del día + progreso semana */}
       <div style={{ background: '#fff', borderTop: '1px solid #DCDEE0', padding: '10px 16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
           <div style={{ fontSize: 12, color: '#6B6B6B' }}>
@@ -351,12 +345,12 @@ export default function Dashboard() {
   const [issueSearch, setIssueSearch] = useState("");
   const [soloAsignadasAMi, setSoloAsignadasAMi] = useState(false);
 
-  // Filtros
-  const [filterProject, setFilterProject] = useState("");
-  const [filterEpic, setFilterEpic] = useState("");
-  const [filterStatus, setFilterStatus] = useState("");
-  const [filterIssue, setFilterIssue] = useState("");
-  const [soloMias, setSoloMias] = useState(true);
+  // Búsqueda global
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [globalResults, setGlobalResults] = useState<Issue[]>([]);
+  const [globalSearching, setGlobalSearching] = useState(false);
+  const [showGlobalResults, setShowGlobalResults] = useState(false);
+  const globalSearchRef = useRef<HTMLDivElement>(null);
 
   // Guardado
   const [showTwoWeeks, setShowTwoWeeks] = useState(true);
@@ -366,12 +360,6 @@ export default function Dashboard() {
 
   const days = getWeekDays(refDate, showTwoWeeks);
   const pendingChanges = rows.some(r => Object.values(r.cells).some(c => c.dirty));
-  const filteredRows = rows.filter(r =>
-    (!filterProject || r.issue.project === filterProject) &&
-    (!filterEpic || r.issue.parentSummary === filterEpic) &&
-    (!filterStatus || r.issue.status === filterStatus) &&
-    (!filterIssue || r.issue.key === filterIssue)
-  );
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -381,6 +369,22 @@ export default function Dashboard() {
   useEffect(() => { fetchUser(); fetchProjects(); }, []);
   useEffect(() => { fetchWeekData(); }, [refDate]);
   useEffect(() => { if (selectedProject) fetchIssues(selectedProject); else setIssues([]); setIssueSearch(""); }, [selectedProject]);
+
+  useEffect(() => {
+    if (!globalSearch.trim()) { setGlobalResults([]); setShowGlobalResults(false); return; }
+    const timer = setTimeout(async () => {
+      setGlobalSearching(true);
+      const res = await fetch(`/api/jira/issues?q=${encodeURIComponent(globalSearch)}`);
+      if (res.ok) { const data = await res.json(); setGlobalResults(data.issues || []); setShowGlobalResults(true); }
+      setGlobalSearching(false);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [globalSearch]);
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (globalSearchRef.current && !globalSearchRef.current.contains(e.target as Node)) setShowGlobalResults(false); };
+    document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
+  }, []);
 
   const fetchUser = async () => {
     const res = await fetch("/api/auth/me");
@@ -464,9 +468,9 @@ export default function Dashboard() {
   const weekRemaining = Math.max(JORNADA_SEMANAL - weekTotal, 0);
   const weekPct = Math.min((weekTotal / JORNADA_SEMANAL) * 100, 100);
   const filteredIssues = issues.filter(i =>
-  (i.summary.toLowerCase().includes(issueSearch.toLowerCase()) || i.key.toLowerCase().includes(issueSearch.toLowerCase())) &&
-  (!soloAsignadasAMi || (i as any).assigneeId === user?.accountId)
-);
+    (i.summary.toLowerCase().includes(issueSearch.toLowerCase()) || i.key.toLowerCase().includes(issueSearch.toLowerCase())) &&
+    (!soloAsignadasAMi || (i as any).assigneeId === user?.accountId)
+  );
   const groups = groupIssues(filteredIssues);
 
   if (sessionExpired) return (
@@ -492,12 +496,11 @@ export default function Dashboard() {
           handleSave={handleSave} saving={saving} pendingChanges={pendingChanges}
           saveSuccess={saveSuccess} saveError={saveError} weekTotal={weekTotal} />
       )}
-      {/* FAB */}
-<button onClick={() => setDrawerOpen(true)}
-  style={{ position: 'fixed', bottom: 80, right: 16, background: '#E30613', color: '#fff', border: 'none', borderRadius: 24, padding: '12px 20px', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 16px rgba(227,6,19,0.4)', zIndex: 40, display: 'flex', alignItems: 'center', gap: 8 }}>
-  <span style={{ fontSize: 20, fontWeight: 300, lineHeight: 1 }}>+</span>
-  Más tickets
-</button>
+      <button onClick={() => setDrawerOpen(true)}
+        style={{ position: 'fixed', bottom: 80, right: 16, background: '#E30613', color: '#fff', border: 'none', borderRadius: 24, padding: '12px 20px', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 16px rgba(227,6,19,0.4)', zIndex: 40, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 20, fontWeight: 300, lineHeight: 1 }}>+</span>
+        Más tickets
+      </button>
       <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} projects={projects} loadingProjects={loadingProjects} rows={rows} onAdd={i => { addIssue(i); }} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </main>
@@ -520,20 +523,20 @@ export default function Dashboard() {
               : <ProjectSelector projects={projects} value={selectedProject} onChange={setSelectedProject} />}
           </div>
           {selectedProject && (
-  <>
-    <div style={{ padding: '6px 10px', borderBottom: '1px solid #DCDEE0' }}>
-      <input type="text" placeholder="🔍 Filtrar tickets..." value={issueSearch} onChange={e => setIssueSearch(e.target.value)}
-        style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 11, outline: 'none', color: '#1C1C1C', WebkitTextFillColor: '#1C1C1C' }} />
-    </div>
-    <div style={{ padding: '6px 10px', borderBottom: '1px solid #DCDEE0' }}>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B6B6B', cursor: 'pointer' }}>
-        <input type="checkbox" checked={soloAsignadasAMi} onChange={e => setSoloAsignadasAMi(e.target.checked)}
-          style={{ accentColor: '#E30613', width: 13, height: 13 }} />
-        Solo asignadas a mí
-      </label>
-    </div>
-  </>
-)}
+            <>
+              <div style={{ padding: '6px 10px', borderBottom: '1px solid #DCDEE0' }}>
+                <input type="text" placeholder="🔍 Filtrar tickets..." value={issueSearch} onChange={e => setIssueSearch(e.target.value)}
+                  style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 11, outline: 'none', color: '#1C1C1C', WebkitTextFillColor: '#1C1C1C' }} />
+              </div>
+              <div style={{ padding: '6px 10px', borderBottom: '1px solid #DCDEE0' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B6B6B', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={soloAsignadasAMi} onChange={e => setSoloAsignadasAMi(e.target.checked)}
+                    style={{ accentColor: '#E30613', width: 13, height: 13 }} />
+                  Solo asignadas a mí
+                </label>
+              </div>
+            </>
+          )}
           <div style={{ flex: 1, overflowY: 'auto', padding: 10 }}>
             {loadingIssues ? <div style={{ textAlign: 'center', padding: '20px 0', fontSize: 12, color: '#6B6B6B' }}>Cargando...</div>
               : !selectedProject ? <div style={{ textAlign: 'center', padding: '24px 0' }}><div style={{ fontSize: 28, marginBottom: 6 }}>📁</div><p style={{ fontSize: 12, color: '#9CA3AF', margin: 0 }}>Elegí un proyecto</p></div>
@@ -541,42 +544,72 @@ export default function Dashboard() {
               : groups.map(g => <EpicGroup key={g.parentKey || "__none__"} group={g} onAdd={addIssue} rows={rows} />)}
           </div>
         </div>
+
         {/* PANEL DERECHO */}
         <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', padding: 16, gap: 12 }}>
+          {/* Fila 1: título + botones semana */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <div>
               <p style={{ fontSize: 11, color: '#9CA3AF', letterSpacing: '0.08em', margin: '0 0 2px' }}>PASO 1 · <span style={{ color: '#E30613', fontWeight: 700 }}>ELIGE</span> · PASO 2 · <span style={{ color: '#E30613', fontWeight: 700 }}>IMPUTA</span> · PASO 3 · <span style={{ color: '#E30613', fontWeight: 700 }}>GUARDA</span></p>
               <h2 style={{ fontSize: 18, fontWeight: 700, color: '#E30613', margin: 0 }}>Registro de horas</h2>
             </div>
-            
-<div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-
-             <button onClick={() => { setRefDate(new Date()); setShowTwoWeeks(false); }}
-  style={{ fontSize: 11, padding: '5px 12px', borderRadius: 3, border: `1px solid ${!showTwoWeeks ? '#E30613' : '#DCDEE0'}`, background: !showTwoWeeks ? '#FBEEEE' : '#fff', color: !showTwoWeeks ? '#E30613' : '#6B6B6B', cursor: 'pointer', fontWeight: !showTwoWeeks ? 700 : 400, whiteSpace: 'nowrap' }}>
-  Semana actual
-</button>
-<button onClick={() => { setRefDate(new Date()); setShowTwoWeeks(true); }}
-  style={{ fontSize: 11, padding: '5px 12px', borderRadius: 3, border: `1px solid ${showTwoWeeks ? '#E30613' : '#DCDEE0'}`, background: showTwoWeeks ? '#FBEEEE' : '#fff', color: showTwoWeeks ? '#E30613' : '#6B6B6B', cursor: 'pointer', fontWeight: showTwoWeeks ? 700 : 400, whiteSpace: 'nowrap' }}>
-  + Semana anterior
-</button>
-
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <button onClick={() => { setRefDate(new Date()); setShowTwoWeeks(false); }}
+                style={{ fontSize: 11, padding: '5px 12px', borderRadius: 3, border: `1px solid ${!showTwoWeeks ? '#E30613' : '#DCDEE0'}`, background: !showTwoWeeks ? '#FBEEEE' : '#fff', color: !showTwoWeeks ? '#E30613' : '#6B6B6B', cursor: 'pointer', fontWeight: !showTwoWeeks ? 700 : 400, whiteSpace: 'nowrap' }}>
+                Semana actual
+              </button>
+              <button onClick={() => { setRefDate(new Date()); setShowTwoWeeks(true); }}
+                style={{ fontSize: 11, padding: '5px 12px', borderRadius: 3, border: `1px solid ${showTwoWeeks ? '#E30613' : '#DCDEE0'}`, background: showTwoWeeks ? '#FBEEEE' : '#fff', color: showTwoWeeks ? '#E30613' : '#6B6B6B', cursor: 'pointer', fontWeight: showTwoWeeks ? 700 : 400, whiteSpace: 'nowrap' }}>
+                + Semana anterior
+              </button>
               <button onClick={prevWeek} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 12 }}>◀</button>
               <span style={{ fontSize: 12, fontWeight: 700, color: '#1C1C1C', whiteSpace: 'nowrap' }}>{fmtWeekLabel(days)}</span>
               <button onClick={nextWeek} style={{ width: 28, height: 28, border: '1px solid #DCDEE0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 12 }}>▶</button>
               <button onClick={goToday} style={{ fontSize: 11, fontWeight: 700, border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 10px', background: '#fff', cursor: 'pointer' }}>Hoy</button>
             </div>
-
-
           </div>
+
+          {/* Fila 2: buscador global */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, padding: '6px 12px' }}>
-              <svg style={{ width: 14, height: 14, color: '#9CA3AF', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-              <input type="text" value={filterIssue} onChange={e => setFilterIssue(e.target.value)} placeholder="Buscar por clave o título de incidencia..."
-                style={{ flex: 1, border: 'none', outline: 'none', fontSize: 13, color: '#1C1C1C', background: 'transparent' }} />
-              {filterIssue && <button onClick={() => setFilterIssue("")} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 14, padding: 0 }}>✕</button>}
+            <div ref={globalSearchRef} style={{ flex: 1, position: 'relative' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, padding: '6px 12px' }}>
+                <svg style={{ width: 14, height: 14, color: '#9CA3AF', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                <input type="text" value={globalSearch} onChange={e => setGlobalSearch(e.target.value)} placeholder="Buscar cualquier ticket de Jira..."
+                  style={{ flex: 1, border: 'none', outline: 'none', fontSize: 13, color: '#1C1C1C', background: 'transparent' }} />
+                {globalSearching && <div style={{ width: 14, height: 14, border: '2px solid #DCDEE0', borderTop: '2px solid #E30613', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />}
+                {globalSearch && !globalSearching && <button onClick={() => { setGlobalSearch(""); setGlobalResults([]); setShowGlobalResults(false); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 14, padding: 0 }}>✕</button>}
+              </div>
+              {showGlobalResults && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30, background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', marginTop: 2, maxHeight: 320, overflowY: 'auto' }}>
+                  {globalResults.length === 0
+                    ? <p style={{ padding: '12px 14px', fontSize: 12, color: '#9CA3AF', margin: 0 }}>Sin resultados</p>
+                    : globalResults.map(issue => {
+                      const added = rows.some(r => r.issue.key === issue.key);
+                      const ts = ISSUE_TYPE_STYLES[issue.issueType] || { emoji: "📄", color: "#9CA3AF" };
+                      return (
+                        <div key={issue.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', borderBottom: '1px solid #F0F0F0', gap: 8 }}>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <span style={{ fontSize: 12, color: ts.color }}>{ts.emoji}</span>
+                              <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#E30613' }}>{issue.key}</span>
+                              <span style={{ fontSize: 10, color: '#9CA3AF' }}>{issue.issueType}</span>
+                            </div>
+                            <p style={{ margin: '2px 0 0', fontSize: 12, color: '#1C1C1C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.summary}</p>
+                            {issue.parentSummary && <span style={{ fontSize: 10, color: '#6B6B6B' }}>⚡ {issue.parentSummary}</span>}
+                          </div>
+                          <button onClick={() => { addIssue(issue); setGlobalSearch(""); setShowGlobalResults(false); }} disabled={added}
+                            style={{ flexShrink: 0, fontSize: 11, border: `1px solid ${added ? '#D4AF37' : '#DCDEE0'}`, borderRadius: 3, padding: '3px 10px', background: added ? '#FFFDF0' : '#fff', color: added ? '#856404' : '#E30613', cursor: added ? 'default' : 'pointer', fontWeight: 700 }}>
+                            {added ? '✓' : '+ Agregar'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
-           
           </div>
+
+          {/* Tabla */}
           <div style={{ background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, overflow: 'hidden', flex: 1 }}>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -588,7 +621,7 @@ export default function Dashboard() {
                       <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{new Date(d + "T12:00:00").getDate()}</div>
                     </th>))}
                     <th style={{ textAlign: 'center', padding: '8px 10px', minWidth: 70, background: '#C00000', borderLeft: '1px solid rgba(255,255,255,0.15)', fontSize: 11, fontWeight: 700, color: '#fff', textTransform: 'uppercase' }}>Total</th>
-                    <th style={{ width: 28, background: '#E30613', borderLeft: '1px solid rgba(255,255,255,0.15)' }}></th>
+                    <th style={{ width: 36, background: '#E30613', borderLeft: '1px solid rgba(255,255,255,0.15)' }}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -604,9 +637,9 @@ export default function Dashboard() {
                       <p style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>No hay registros esta semana</p>
                       <p style={{ margin: '4px 0 0', fontSize: 12 }}>Elegí un proyecto en el panel izquierdo y agregá tickets</p>
                     </td></tr>
-                  ) : filteredRows.length === 0 ? (
-                    <tr><td colSpan={days.length + 3} style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF', fontSize: 13 }}>No hay resultados con los filtros aplicados</td></tr>
-                  ) : filteredRows.map((row, ri) => {
+                  ) : rows.length === 0 ? (
+                    <tr><td colSpan={days.length + 3} style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF', fontSize: 13 }}>No hay resultados</td></tr>
+                  ) : rows.map((row, ri) => {
                     const ts = ISSUE_TYPE_STYLES[row.issue.issueType] || { emoji: "📄", color: "#9CA3AF" };
                     const rowTotal = rowTotals[row.issue.key] || 0;
                     const hasDirty = Object.values(row.cells).some(c => c.dirty);
@@ -617,7 +650,10 @@ export default function Dashboard() {
                             {hasDirty && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#E30613', flexShrink: 0, marginTop: 5 }} />}
                             <span style={{ fontSize: 14, marginTop: 1, color: ts.color, flexShrink: 0 }}>{ts.emoji}</span>
                             <div style={{ minWidth: 0 }}>
-                              <div style={{ display: 'flex', gap: 6, marginBottom: 1 }}><a href={`https://factoriamindata.atlassian.net/browse/${row.issue.key}`} target="_blank" rel="noreferrer" style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#E30613', textDecoration: 'none' }}>{row.issue.key}</a><span style={{ fontSize: 10, color: '#9CA3AF' }}>{row.issue.issueType}</span></div>
+                              <div style={{ display: 'flex', gap: 6, marginBottom: 1 }}>
+                                <a href={`https://factoriamindata.atlassian.net/browse/${row.issue.key}`} target="_blank" rel="noreferrer" style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#E30613', textDecoration: 'none' }}>{row.issue.key}</a>
+                                <span style={{ fontSize: 10, color: '#9CA3AF' }}>{row.issue.issueType}</span>
+                              </div>
                               <p style={{ margin: 0, fontSize: 12, color: '#1C1C1C', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>{row.issue.summary}</p>
                               <div style={{ display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap' }}>
                                 {row.issue.parentSummary && <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 99, background: '#F3F4F6', color: '#6B6B6B', border: '1px solid #DCDEE0' }}>⚡ {row.issue.parentSummary}</span>}
@@ -642,9 +678,10 @@ export default function Dashboard() {
                             </td>
                           );
                         })}
+                        <td style={{ textAlign: 'center', padding: '6px 6px', borderLeft: '1px solid #F0F0F0', fontWeight: 700, fontSize: 13, color: rowTotal > 0 ? '#1C1C1C' : '#DCDEE0' }}>{rowTotal > 0 ? secsToDisplay(rowTotal) : "—"}</td>
                         <td style={{ textAlign: 'center', padding: '6px 4px', borderLeft: '1px solid #F0F0F0' }}>
-  <button onClick={() => removeRow(row.issue.key)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DCDEE0', fontSize: 14 }} onMouseOver={e => e.currentTarget.style.color = '#E30613'} onMouseOut={e => e.currentTarget.style.color = '#DCDEE0'}>✕</button>
-</td>
+                          <button onClick={() => removeRow(row.issue.key)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DCDEE0', fontSize: 14 }} onMouseOver={e => e.currentTarget.style.color = '#E30613'} onMouseOut={e => e.currentTarget.style.color = '#DCDEE0'}>✕</button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -668,6 +705,8 @@ export default function Dashboard() {
               </table>
             </div>
           </div>
+
+          {/* Footer */}
           <div style={{ background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 200 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5 }}>
