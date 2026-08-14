@@ -111,8 +111,10 @@ export default function AppHeader({ user, activeTab, onTimerStop, activeTimerTic
           Consultar
         </Link>
         <Link href="/upload" style={{
-          // display: 'none',
-          display: 'inline-block',
+          // No mostrar
+          display: 'none',
+          // Mostrar
+          // display: 'inline-block',
           background: 'none', border: 0,
           borderBottom: activeTab === 'upload' ? '2px solid #E30613' : '2px solid transparent',
           padding: isMobile ? '6px 10px' : '8px 14px',
