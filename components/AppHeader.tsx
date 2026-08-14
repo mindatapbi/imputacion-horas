@@ -19,7 +19,7 @@ interface TimerState {
 
 interface Props {
   user: User | null;
-  activeTab: "dashboard" | "timesheet";
+  activeTab: "dashboard" | "timesheet" | "upload";
   onTimerStop?: (seconds: number, ticketKey: string, ticketSummary: string) => void;
   activeTimerTicket?: { key: string; summary: string } | null;
   onStartTimer?: (key: string, summary: string) => void;
@@ -109,6 +109,19 @@ export default function AppHeader({ user, activeTab, onTimerStop, activeTimerTic
           transition: 'color 0.12s',
         }}>
           Consultar
+        </Link>
+        <Link href="/upload" style={{
+          // display: 'none',
+          display: 'inline-block',
+          background: 'none', border: 0,
+          borderBottom: activeTab === 'upload' ? '2px solid #E30613' : '2px solid transparent',
+          padding: isMobile ? '6px 10px' : '8px 14px',
+          fontWeight: 700, fontSize: isMobile ? 12 : 13,
+          color: activeTab === 'upload' ? '#E30613' : '#6B6B6B',
+          cursor: 'pointer', textDecoration: 'none',
+          transition: 'color 0.12s',
+        }}>
+          Carga masiva
         </Link>
       </nav>
 
