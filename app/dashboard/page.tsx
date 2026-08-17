@@ -391,7 +391,7 @@ export default function Dashboard() {
 
   const fetchUser = async () => { const res = await fetch("/api/auth/me"); if (res.status === 401) { setSessionExpired(true); return; } if (res.ok) { const data = await res.json(); setUser(data.user); } };
   const fetchProjects = async () => { setLoadingProjects(true); const res = await fetch("/api/jira/issues"); if (res.ok) { const data = await res.json(); setProjects(data.projects || []); } setLoadingProjects(false); };
-  const fetchIssues = async (pk: string) => { setLoadingIssues(true); const res = await fetch(`/api/jira/issues?project=${pk}${incluirFinalizadas ? '&includedone=true' : ''}`); if (res.ok) { const data = await res.json(); const allIssues = data.issues || []; setIssues(incluirFinalizadas ? allIssues : allIssues.filter((i: any) => i.parentStatusCategory !== 'done')); } setLoadingIssues(false); };
+  const fetchIssues = async (pk: string) => { setLoadingIssues(true); const res = await fetch(`/api/jira/issues?project=${pk}${incluirFinalizadas ? '&includedone=true' : ''}`); if (res.ok) { const data = await res.json(); const allIssues = data.issues || []; const filtered = allIssues.filter((i: any) => i.issueType !== 'Epic'); setIssues(incluirFinalizadas ? filtered : filtered.filter((i: any) => i.parentStatusCategory !== 'done')); } setLoadingIssues(false); };
   const fetchData = async () => {
     const periodDays = viewMode === '30' ? getLastNDays(30) : viewMode === '60' ? getLastNDays(60) : getWeekDays(refDate, viewMode === 'twoWeeks');
     setLoading(true); setSaveSuccess(false); setSaveError("");
