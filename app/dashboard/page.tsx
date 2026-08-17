@@ -8,6 +8,7 @@ interface Issue {
   project: string; projectKey: string; issueType: string;
   parentKey: string | null; parentSummary: string | null;
   parentStatusCategory: string | null;
+  sociedad: string | null;
 }
 interface WorklogCell {
   worklogId: string | null; seconds: number; raw: string; comment: string; dirty: boolean;
@@ -354,6 +355,7 @@ export default function Dashboard() {
   const [loadingIssues, setLoadingIssues] = useState(false);
   const [issueSearch, setIssueSearch] = useState("");
   const [soloAsignadasAMi, setSoloAsignadasAMi] = useState(false);
+  const [filterSociedad, setFilterSociedad] = useState("");
   const [incluirFinalizadas, setIncluirFinalizadas] = useState(false);
 
   const [globalSearch, setGlobalSearch] = useState("");
@@ -373,7 +375,7 @@ export default function Dashboard() {
   useEffect(() => { const check = () => setIsMobile(window.innerWidth < 768); check(); window.addEventListener("resize", check); return () => window.removeEventListener("resize", check); }, []);
   useEffect(() => { fetchUser(); fetchProjects(); }, []);
   useEffect(() => { fetchData(); }, [refDate, viewMode]);
-  useEffect(() => { if (selectedProject) fetchIssues(selectedProject); else setIssues([]); setIssueSearch(""); }, [selectedProject, incluirFinalizadas]);
+  useEffect(() => { if (selectedProject) fetchIssues(selectedProject); else setIssues([]); setIssueSearch(""); setFilterSociedad(""); }, [selectedProject, incluirFinalizadas]);
   useEffect(() => {
     if (!globalSearch.trim()) { setGlobalResults([]); setShowGlobalResults(false); return; }
     const timer = setTimeout(async () => {
@@ -403,7 +405,7 @@ export default function Dashboard() {
     const issueMap: Record<string, { issue: Issue; cells: Record<string, WorklogCell> }> = {};
     for (const entry of entries) {
       if (!issueMap[entry.issueKey]) {
-        issueMap[entry.issueKey] = { issue: { key: entry.issueKey, summary: entry.issueSummary, status: entry.status || "", project: entry.project, projectKey: entry.projectKey, issueType: entry.issueType, parentKey: entry.parentKey, parentSummary: entry.parentSummary, parentStatusCategory: null }, cells: {} };
+        issueMap[entry.issueKey] = { issue: { key: entry.issueKey, summary: entry.issueSummary, status: entry.status || "", project: entry.project, projectKey: entry.projectKey, issueType: entry.issueType, parentKey: entry.parentKey, parentSummary: entry.parentSummary, parentStatusCategory: null, sociedad: null }, cells: {} };
       }
       const existing = issueMap[entry.issueKey].cells[entry.date];
       if (existing) { existing.seconds += entry.timeSpentSeconds; existing.raw = secsToDisplay(existing.seconds); }
@@ -460,7 +462,8 @@ export default function Dashboard() {
   const weekPct = Math.min((periodTotal / JORNADA_SEMANAL) * 100, 100);
   const filteredIssues = issues.filter(i =>
     (i.summary.toLowerCase().includes(issueSearch.toLowerCase()) || i.key.toLowerCase().includes(issueSearch.toLowerCase())) &&
-    (!soloAsignadasAMi || (i as any).assigneeId === user?.accountId)
+    (!soloAsignadasAMi || (i as any).assigneeId === user?.accountId) &&
+    (!filterSociedad || i.sociedad === filterSociedad)
   );
   const groups = groupIssues(filteredIssues);
 
@@ -534,6 +537,16 @@ export default function Dashboard() {
                   <input type="checkbox" checked={incluirFinalizadas} onChange={e => setIncluirFinalizadas(e.target.checked)} style={{ accentColor: '#E30613', width: 13, height: 13 }} />
                   Incluir épicas finalizadas
                 </label>
+              </div>
+              <div style={{ padding: '6px 10px', borderBottom: '1px solid #DCDEE0' }}>
+                <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6B6B6B', margin: '0 0 5px' }}>Sociedad</p>
+                <select value={filterSociedad} onChange={e => setFilterSociedad(e.target.value)}
+                  style={{ width: '100%', border: '1px solid #DCDEE0', borderRadius: 3, padding: '5px 8px', fontSize: 11, outline: 'none', color: '#1C1C1C', background: '#fff' }}>
+                  <option value="">— Todas —</option>
+                  {[...new Set(issues.map(i => i.sociedad).filter(Boolean))].sort().map(s => (
+                    <option key={s} value={s!}>{s}</option>
+                  ))}
+                </select>
               </div>
             </>
           )} 

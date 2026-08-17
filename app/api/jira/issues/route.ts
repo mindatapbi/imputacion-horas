@@ -65,6 +65,7 @@ export async function GET(request: NextRequest) {
       parentKey: issue.fields.parent?.key || null,
       parentSummary: issue.fields.parent?.fields?.summary || null,
       parentStatusCategory: issue.fields.parent?.fields?.status?.statusCategory?.key || null,
+      sociedad: issue.fields.customfield_10177?.value || null,
     })) || [];
     return NextResponse.json({ issues });
 
