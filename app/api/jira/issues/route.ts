@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     // ── TICKETS POR PROYECTO ───────────────────────────────────────────────
     const includeDone = searchParams.get("includeDone") === "true";
     const jql = encodeURIComponent(`project = "${projectKey}"${!includeDone ? ' AND statusCategory != Done' : ''} ORDER BY issuetype ASC, updated DESC`);
-    const url = `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,status,project,issuetype,parent,assignee&maxResults=100&expand=names`;
+    const url = `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,status,project,issuetype,parent,assignee,customfield_10177&maxResults=100&expand=names`;
     const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
     const data = await response.json();
     const issues = data.issues?.map((issue: any) => ({
