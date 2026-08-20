@@ -86,12 +86,10 @@ function fmtDayLabel(d: string): string {
 }
 function groupIssues(issues: Issue[]): IssueGroup[] {
   const g: Record<string, IssueGroup> = {};
-  const epicKeys = new Set(issues.filter(i => i.issueType === 'Epic').map(i => i.key));
   for (const i of issues) {
-    const isDirectChildOfEpic = i.parentKey && epicKeys.has(i.parentKey);
-    const k = isDirectChildOfEpic ? i.parentKey! : "__none__";
-    const summary = isDirectChildOfEpic ? i.parentSummary : null;
-    if (!g[k]) g[k] = { parentKey: isDirectChildOfEpic ? i.parentKey : null, parentSummary: summary, issues: [] };
+    const hasEpicParent = i.parentKey && i.parentSummary;
+    const k = hasEpicParent ? i.parentKey! : "__none__";
+    if (!g[k]) g[k] = { parentKey: hasEpicParent ? i.parentKey : null, parentSummary: hasEpicParent ? i.parentSummary : null, issues: [] };
     g[k].issues.push(i);
   }
   return Object.values(g).sort((a, b) => a.parentKey === null ? 1 : b.parentKey === null ? -1 : (a.parentKey || "").localeCompare(b.parentKey || ""));
