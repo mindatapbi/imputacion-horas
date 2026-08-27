@@ -565,7 +565,7 @@ const sinPadresIntermedios = allIssues.filter((i: any) => i.issueType !== 'Epic'
         </div>
 
         {/* PANEL DERECHO */}
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: 16, gap: 12 }}>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: 16, gap: 12, minHeight: 0 }}>
           {/* Fila 1: título + botones */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <div>
