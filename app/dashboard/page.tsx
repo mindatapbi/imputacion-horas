@@ -629,7 +629,7 @@ const sinPadresIntermedios = allIssues.filter((i: any) => i.issueType !== 'Epic'
 
           {/* Tabla */}
            <div style={{ background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, overflow: 'hidden', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            <div className="table-scroll" style={{ overflow: 'auto', flex: 1 }}>
+            <div className="table-scroll" style={{ overflowX: 'auto', overflowY: 'scroll', flex: 1, minHeight: 0 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                   <tr style={{ background: '#E30613' }}>
