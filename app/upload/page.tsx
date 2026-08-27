@@ -122,13 +122,13 @@ export default function UploadPage() {
   const downloadTemplate = () => {
     const wb = XLSX.utils.book_new();
     const data = [
-      ["Ticket", "Fecha", "Horas", "Comentario"],
-      ["JD-106", "2026-08-11", "2h30", "Desarrollo feature X"],
-      ["PI-242", "2026-08-12", "4h", "Reunión de equipo"],
-      ["JD-26", "2026-08-13", "1:30", "Daily standup"],
+      ["Ticket", "Fecha", "Horas", "Comentario", "Título", "Épica", "Proyecto"],
+      ["JD-106", "2026-08-11", "2.50", "Desarrollo feature X", "Investigación Jira Solución carga de horas", "Data - Jira y BI", "Jira | Data"],
+      ["PI-242", "2026-08-12", "4.00", "Reunión de equipo", "Desarrollo", "APPH - WebApp Carga de Horas", "Proyectos Internos"],
+      ["JD-26", "2026-08-13", "1.50", "Daily standup", "Reuniones Diarias", "Data - Jira y BI", "Jira | Data"],
     ];
     const ws = XLSX.utils.aoa_to_sheet(data);
-    ws["!cols"] = [{ wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 40 }];
+    ws["!cols"] = [{ wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 30 }, { wch: 40 }, { wch: 30 }, { wch: 20 }];
     XLSX.utils.book_append_sheet(wb, ws, "Carga de Horas");
     XLSX.writeFile(wb, "plantilla_carga_horas.xlsx");
   };
@@ -315,6 +315,7 @@ export default function UploadPage() {
                   <th style={{ textAlign: 'left', padding: '6px 12px', border: '1px solid #DCDEE0', fontWeight: 700, color: '#E30613' }}>Fecha</th>
                   <th style={{ textAlign: 'left', padding: '6px 12px', border: '1px solid #DCDEE0', fontWeight: 700, color: '#E30613' }}>Horas</th>
                   <th style={{ textAlign: 'left', padding: '6px 12px', border: '1px solid #DCDEE0', fontWeight: 700, color: '#E30613' }}>Comentario</th>
+                  <th style={{ textAlign: 'left', padding: '6px 12px', border: '1px solid #DCDEE0', fontWeight: 700, color: '#9CA3AF' }}>Título / Épica / Proyecto</th>
                 </tr>
               </thead>
               <tbody>
@@ -323,11 +324,12 @@ export default function UploadPage() {
                   <td style={{ padding: '6px 12px', border: '1px solid #DCDEE0' }}>2026-08-11 <span style={{ color: '#9CA3AF' }}>o</span> 11/08/2026</td>
                   <td style={{ padding: '6px 12px', border: '1px solid #DCDEE0' }}>2h30 <span style={{ color: '#9CA3AF' }}>· 2:30 · 90m · 2.5</span></td>
                   <td style={{ padding: '6px 12px', border: '1px solid #DCDEE0', color: '#9CA3AF' }}>Opcional</td>
+                  <td style={{ padding: '6px 12px', border: '1px solid #DCDEE0', color: '#9CA3AF' }}>Se ignoran (informativas)</td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p style={{ margin: '10px 0 0', fontSize: 11, color: '#9CA3AF' }}>La primera fila del Excel debe tener los encabezados: <strong>Ticket, Fecha, Horas, Comentario</strong></p>
+          <p style={{ margin: '10px 0 0', fontSize: 11, color: '#9CA3AF' }}>La primera fila del Excel debe tener los encabezados: <strong>Ticket, Fecha, Horas, Comentario</strong>. Este es el mismo formato que exportás desde <strong>Consultar</strong> — podés descargarlo de ahí y volver a subirlo.</p>
         </div>
 
       </div>
