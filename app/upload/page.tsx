@@ -311,11 +311,11 @@ export default function UploadPage() {
             <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%' }}>
               <thead>
                 <tr style={{ background: '#F9FAFB' }}>
-                  <th style={{ textAlign: 'left', padding: '6px 12px', border: '1px solid #DCDEE0', fontWeight: 700, color: '#E30613' }}>Ticket</th>
-                  <th style={{ textAlign: 'left', padding: '6px 12px', border: '1px solid #DCDEE0', fontWeight: 700, color: '#E30613' }}>Fecha</th>
-                  <th style={{ textAlign: 'left', padding: '6px 12px', border: '1px solid #DCDEE0', fontWeight: 700, color: '#E30613' }}>Horas</th>
-                  <th style={{ textAlign: 'left', padding: '6px 12px', border: '1px solid #DCDEE0', fontWeight: 700, color: '#E30613' }}>Comentario</th>
-                  <th style={{ textAlign: 'left', padding: '6px 12px', border: '1px solid #DCDEE0', fontWeight: 700, color: '#9CA3AF' }}>Título / Épica / Proyecto</th>
+                  <th style={{ textAlign: 'left', padding: '6px 12px', border: '1px solid #DCDEE0', fontWeight: 700, color: '#E30613' }}>Ticket <span style={{ fontSize: 9, background: '#E30613', color: '#fff', padding: '1px 5px', borderRadius: 99, marginLeft: 4 }}>Obligatorio</span></th>
+                  <th style={{ textAlign: 'left', padding: '6px 12px', border: '1px solid #DCDEE0', fontWeight: 700, color: '#E30613' }}>Fecha <span style={{ fontSize: 9, background: '#E30613', color: '#fff', padding: '1px 5px', borderRadius: 99, marginLeft: 4 }}>Obligatorio</span></th>
+                  <th style={{ textAlign: 'left', padding: '6px 12px', border: '1px solid #DCDEE0', fontWeight: 700, color: '#E30613' }}>Horas <span style={{ fontSize: 9, background: '#E30613', color: '#fff', padding: '1px 5px', borderRadius: 99, marginLeft: 4 }}>Obligatorio</span></th>
+                  <th style={{ textAlign: 'left', padding: '6px 12px', border: '1px solid #DCDEE0', fontWeight: 700, color: '#6B6B6B' }}>Comentario <span style={{ fontSize: 9, background: '#9CA3AF', color: '#fff', padding: '1px 5px', borderRadius: 99, marginLeft: 4 }}>Opcional</span></th>
+                  <th style={{ textAlign: 'left', padding: '6px 12px', border: '1px solid #DCDEE0', fontWeight: 700, color: '#6B6B6B' }}>Título / Épica / Proyecto <span style={{ fontSize: 9, background: '#9CA3AF', color: '#fff', padding: '1px 5px', borderRadius: 99, marginLeft: 4 }}>Se ignoran</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -323,8 +323,8 @@ export default function UploadPage() {
                   <td style={{ padding: '6px 12px', border: '1px solid #DCDEE0', fontFamily: 'monospace', color: '#E30613' }}>JD-106</td>
                   <td style={{ padding: '6px 12px', border: '1px solid #DCDEE0' }}>2026-08-11 <span style={{ color: '#9CA3AF' }}>o</span> 11/08/2026</td>
                   <td style={{ padding: '6px 12px', border: '1px solid #DCDEE0' }}>2h30 <span style={{ color: '#9CA3AF' }}>· 2:30 · 90m · 2.5</span></td>
-                  <td style={{ padding: '6px 12px', border: '1px solid #DCDEE0', color: '#9CA3AF' }}>Opcional</td>
-                  <td style={{ padding: '6px 12px', border: '1px solid #DCDEE0', color: '#9CA3AF' }}>Se ignoran (informativas)</td>
+                  <td style={{ padding: '6px 12px', border: '1px solid #DCDEE0', color: '#9CA3AF' }}>Se usa como detalle si está vacío</td>
+                  <td style={{ padding: '6px 12px', border: '1px solid #DCDEE0', color: '#9CA3AF' }}>Solo informativas</td>
                 </tr>
               </tbody>
             </table>
