@@ -38,3 +38,19 @@ input::placeholder {
   color: #6B6B6B !important;
   opacity: 1 !important;
 }
+
+/* Scrollbar visible en tabla */
+.table-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.table-scroll::-webkit-scrollbar-track {
+  background: #F3F4F6;
+}
+.table-scroll::-webkit-scrollbar-thumb {
+  background: #DCDEE0;
+  border-radius: 4px;
+}
+.table-scroll::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
