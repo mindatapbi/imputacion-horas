@@ -512,9 +512,9 @@ const sinPadresIntermedios = allIssues.filter((i: any) => i.issueType !== 'Epic'
   );
 
   return (
-    <main style={{ minHeight: '100vh', background: '#ECF0F1', fontFamily: 'Arial, sans-serif', display: 'flex', flexDirection: 'column' }}>
+    <main style={{ height: '100vh', background: '#ECF0F1', fontFamily: 'Arial, sans-serif', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <AppHeader user={user} activeTab="dashboard" onTimerStop={handleTimerStop} activeTimerTicket={activeTimerTicket} />
-      <div style={{ flex: 1, display: 'flex', height: 'calc(100vh - 57px)' }}>
+      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         {/* PANEL IZQUIERDO */}
         <div style={{ width: 280, flexShrink: 0, background: '#fff', borderRight: '1px solid #DCDEE0', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '10px 12px', borderBottom: '1px solid rgba(212,175,55,0.3)', background: '#FAFAFA' }}>
