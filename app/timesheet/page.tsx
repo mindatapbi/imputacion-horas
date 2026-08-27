@@ -141,10 +141,10 @@ export default function ConsultarPage() {
   };
 
   const exportExcel = () => {
-    const head = ["Fecha","Incidencia","Título","Épica","Proyecto","Horas","Detalle"];
-    const rows2 = filtered.map(e => [e.date, e.issueKey, e.issueSummary, e.parentSummary||"", e.project, (e.timeSpentSeconds/3600).toFixed(2), e.comment||""]);
+    const head = ["Ticket","Fecha","Horas","Comentario","Título","Épica","Proyecto"];
+    const rows2 = filtered.map(e => [e.issueKey, e.date, (e.timeSpentSeconds/3600).toFixed(2), e.comment||"", e.issueSummary, e.parentSummary||"", e.project]);
     const ws = XLSX.utils.aoa_to_sheet([head, ...rows2]);
-    ws['!cols'] = [{wch:12},{wch:12},{wch:40},{wch:30},{wch:20},{wch:8},{wch:30}];
+    ws['!cols'] = [{wch:12},{wch:12},{wch:8},{wch:30},{wch:40},{wch:30},{wch:20}];
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Horas');
     XLSX.writeFile(wb, `horas_${from}_${to}.xlsx`);
   };

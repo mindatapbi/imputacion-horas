@@ -565,7 +565,7 @@ const sinPadresIntermedios = allIssues.filter((i: any) => i.issueType !== 'Epic'
         </div>
 
         {/* PANEL DERECHO */}
-        <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', padding: 16, gap: 12 }}>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: 16, gap: 12 }}>
           {/* Fila 1: título + botones */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <div>
@@ -628,14 +628,14 @@ const sinPadresIntermedios = allIssues.filter((i: any) => i.issueType !== 'Epic'
           </div>
 
           {/* Tabla */}
-          <div style={{ background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, overflow: 'hidden', flex: 1 }}>
-            <div style={{ overflowX: 'auto' }}>
+           <div style={{ background: '#fff', border: '1px solid #DCDEE0', borderRadius: 3, overflow: 'hidden', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ overflowX: 'auto', overflowY: 'auto', flex: 1 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: '#E30613' }}>
                     <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.08em', minWidth: 280, position: 'sticky', left: 0, background: '#E30613', zIndex: 10 }}>Tarea</th>
                     {days.map((d, i) => (<th key={d} style={{ textAlign: 'center', padding: '6px 2px', minWidth: isExtendedView ? 52 : 62, background: d === today ? '#C00000' : '#E30613', borderLeft: '1px solid rgba(255,255,255,0.15)' }}>
-                      <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase' }}>{DAY_LABELS[i % 7]}</div>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase' }}>{DAY_LABELS[(new Date(d + "T12:00:00").getDay() + 6) % 7]}</div>
                       <div style={{ fontSize: isExtendedView ? 11 : 13, fontWeight: 700, color: '#fff' }}>{new Date(d + "T12:00:00").getDate()}</div>
                       {isExtendedView && <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.7)' }}>{new Date(d + "T12:00:00").toLocaleDateString("es-AR", { month: "short" })}</div>}
                     </th>))}
