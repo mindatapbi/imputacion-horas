@@ -17,7 +17,8 @@ interface RowEntry {
   issue: Issue; cells: Record<string, WorklogCell>;
 }
 interface Project { key: string; name: string; }
-interface IssueGroup { parentKey: string | null; parentSummary: string | null; issues: Issue[]; }
+interface TaskWithSubs { task: Issue; subtasks: Issue[]; }
+interface IssueGroup { parentKey: string | null; parentSummary: string | null; tasks: TaskWithSubs[]; }
 
 const ISSUE_TYPE_STYLES: Record<string, { emoji: string; color: string }> = {
   "Epic": { emoji: "⚡", color: "#7C3AED" }, "Story": { emoji: "📗", color: "#059669" },
@@ -86,12 +87,37 @@ function fmtDayLabel(d: string): string {
 }
 function groupIssues(issues: Issue[]): IssueGroup[] {
   const g: Record<string, IssueGroup> = {};
+  const taskMap: Record<string, Issue> = {};
+
+  // Primero indexamos todas las tasks (no subtareas)
   for (const i of issues) {
-    const hasEpicParent = i.parentKey && i.parentSummary;
-    const k = hasEpicParent ? i.parentKey! : "__none__";
-    if (!g[k]) g[k] = { parentKey: hasEpicParent ? i.parentKey : null, parentSummary: hasEpicParent ? i.parentSummary : null, issues: [] };
-    g[k].issues.push(i);
+    if (i.issueType !== 'Sub-task' && i.issueType !== 'Subtarea') {
+      taskMap[i.key] = i;
+    }
   }
+
+  // Agrupamos por épica
+  for (const i of issues) {
+    if (i.issueType === 'Sub-task' || i.issueType === 'Subtarea') continue;
+    const epicKey = i.parentKey && i.parentSummary ? i.parentKey! : "__none__";
+    if (!g[epicKey]) g[epicKey] = { parentKey: epicKey !== "__none__" ? i.parentKey : null, parentSummary: epicKey !== "__none__" ? i.parentSummary : null, tasks: [] };
+    g[epicKey].tasks.push({ task: i, subtasks: [] });
+  }
+
+  // Agregamos subtareas a su task padre
+  for (const i of issues) {
+    if (i.issueType !== 'Sub-task' && i.issueType !== 'Subtarea') continue;
+    const parentTask = i.parentKey;
+    if (!parentTask) continue;
+    const parentIssue = taskMap[parentTask];
+    if (!parentIssue) continue;
+    const epicKey = parentIssue.parentKey && parentIssue.parentSummary ? parentIssue.parentKey! : "__none__";
+    const epicGroup = g[epicKey];
+    if (!epicGroup) continue;
+    const taskWithSubs = epicGroup.tasks.find(t => t.task.key === parentTask);
+    if (taskWithSubs) taskWithSubs.subtasks.push(i);
+  }
+
   return Object.values(g).sort((a, b) => a.parentKey === null ? 1 : b.parentKey === null ? -1 : (a.parentKey || "").localeCompare(b.parentKey || ""));
 }
 
@@ -128,37 +154,91 @@ function ProjectSelector({ projects, value, onChange }: { projects: Project[]; v
 function EpicGroup({ group, onAdd, rows }: { group: IssueGroup; onAdd: (i: Issue) => void; rows: RowEntry[] }) {
   const [collapsed, setCollapsed] = useState(true);
   const isEpic = !!group.parentKey;
-  const addedCount = group.issues.filter(i => rows.some(r => r.issue.key === i.key)).length;
+  const totalIssues = group.tasks.reduce((acc, t) => acc + 1 + t.subtasks.length, 0);
+  const addedCount = group.tasks.reduce((acc, t) => {
+    const taskAdded = rows.some(r => r.issue.key === t.task.key) ? 1 : 0;
+    const subsAdded = t.subtasks.filter(s => rows.some(r => r.issue.key === s.key)).length;
+    return acc + taskAdded + subsAdded;
+  }, 0);
+
   return (
     <div style={{ marginBottom: 5 }}>
+      {/* ÉPICA */}
       <button onClick={() => setCollapsed(!collapsed)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6, padding: '5px 6px', borderRadius: 3, background: isEpic ? '#FBEEEE' : '#F9FAFB', border: `1px solid ${isEpic ? 'rgba(212,175,55,0.3)' : '#DCDEE0'}`, cursor: 'pointer', textAlign: 'left' }}>
         <span style={{ fontSize: 10, color: '#9CA3AF', transform: collapsed ? 'rotate(-90deg)' : 'none', display: 'inline-block', transition: 'transform 0.12s' }}>▼</span>
         {isEpic ? <><span style={{ fontSize: 11 }}>⚡</span><span style={{ fontSize: 11, fontWeight: 700, color: '#E30613', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.parentSummary}</span><span style={{ fontSize: 10, color: '#E30613', fontFamily: 'monospace', fontWeight: 700, flexShrink: 0 }}>{group.parentKey}</span></>
           : <span style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', flex: 1 }}>Sin épica</span>}
-        <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 99, background: addedCount > 0 ? '#FBEEEE' : '#F3F4F6', color: addedCount > 0 ? '#E30613' : '#6B6B6B', flexShrink: 0 }}>{addedCount > 0 ? `${addedCount}/` : ""}{group.issues.length}</span>
+        <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 99, background: addedCount > 0 ? '#FBEEEE' : '#F3F4F6', color: addedCount > 0 ? '#E30613' : '#6B6B6B', flexShrink: 0 }}>
+          {addedCount > 0 ? `${addedCount}/` : ""}{totalIssues}
+        </span>
       </button>
-      {!collapsed && <div style={{ marginLeft: 8, marginTop: 3, paddingLeft: 10, borderLeft: `2px solid ${isEpic ? 'rgba(212,175,55,0.4)' : '#DCDEE0'}` }}>
-        {group.issues.map(issue => {
-          const added = rows.some(r => r.issue.key === issue.key);
-          return (
-            <div key={issue.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 8px', marginBottom: 3, borderRadius: 3, border: `1px solid ${added ? 'rgba(212,175,55,0.4)' : '#DCDEE0'}`, background: added ? '#FFFDF0' : '#fff', gap: 6 }}>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#E30613', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.summary}</p>
-                <div style={{ display: 'flex', gap: 5, marginTop: 2, alignItems: 'center' }}>
-                  <span style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, color: '#E30613' }}>{issue.key}</span>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: STATUS_COLORS[issue.status] || '#9CA3AF', display: 'inline-block' }} />
-                </div>
-              </div>
-              <button onClick={() => onAdd(issue)} disabled={added} style={{ flexShrink: 0, fontSize: 10, border: `1px solid ${added ? '#D4AF37' : '#DCDEE0'}`, borderRadius: 3, padding: '2px 7px', background: added ? '#FFFDF0' : '#fff', color: added ? '#856404' : '#E30613', cursor: added ? 'default' : 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                {added ? "✓" : "+ Agregar"}
-              </button>
-            </div>
-          );
-        })}
-      </div>}
+
+      {/* TASKS y SUBTAREAS */}
+      {!collapsed && (
+        <div style={{ marginLeft: 8, marginTop: 3, paddingLeft: 10, borderLeft: `2px solid ${isEpic ? 'rgba(212,175,55,0.4)' : '#DCDEE0'}` }}>
+          {group.tasks.map(({ task, subtasks }) => (
+            <TaskRow key={task.key} task={task} subtasks={subtasks} onAdd={onAdd} rows={rows} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
+
+function TaskRow({ task, subtasks, onAdd, rows }: { task: Issue; subtasks: Issue[]; onAdd: (i: Issue) => void; rows: RowEntry[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const added = rows.some(r => r.issue.key === task.key);
+  const hasSubtasks = subtasks.length > 0;
+
+  return (
+    <div style={{ marginBottom: 3 }}>
+      {/* TASK */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 8px', borderRadius: 3, border: `1px solid ${added ? 'rgba(212,175,55,0.4)' : '#DCDEE0'}`, background: added ? '#FFFDF0' : '#fff', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flex: 1 }}>
+          {hasSubtasks && (
+            <button onClick={() => setExpanded(!expanded)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 10, padding: '0 2px', flexShrink: 0, transform: expanded ? 'none' : 'rotate(-90deg)', display: 'inline-block', transition: 'transform 0.12s' }}>▼</button>
+          )}
+          {!hasSubtasks && <span style={{ width: 14, flexShrink: 0 }} />}
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#E30613', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.summary}</p>
+            <div style={{ display: 'flex', gap: 5, marginTop: 2, alignItems: 'center' }}>
+              <span style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, color: '#E30613' }}>{task.key}</span>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: STATUS_COLORS[task.status] || '#9CA3AF', display: 'inline-block' }} />
+              {hasSubtasks && <span style={{ fontSize: 9, color: '#9CA3AF' }}>{subtasks.length} subtarea{subtasks.length > 1 ? 's' : ''}</span>}
+            </div>
+          </div>
+        </div>
+        <button onClick={() => onAdd(task)} disabled={added} style={{ flexShrink: 0, fontSize: 10, border: `1px solid ${added ? '#D4AF37' : '#DCDEE0'}`, borderRadius: 3, padding: '2px 7px', background: added ? '#FFFDF0' : '#fff', color: added ? '#856404' : '#E30613', cursor: added ? 'default' : 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}>
+          {added ? "✓" : "+ Agregar"}
+        </button>
+      </div>
+
+      {/* SUBTAREAS */}
+      {expanded && subtasks.length > 0 && (
+        <div style={{ marginLeft: 16, marginTop: 2, paddingLeft: 10, borderLeft: '2px solid #DCDEE0' }}>
+          {subtasks.map(sub => {
+            const subAdded = rows.some(r => r.issue.key === sub.key);
+            return (
+              <div key={sub.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', marginBottom: 2, borderRadius: 3, border: `1px solid ${subAdded ? 'rgba(212,175,55,0.4)' : '#DCDEE0'}`, background: subAdded ? '#FFFDF0' : '#F9FAFB', gap: 6 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <p style={{ margin: 0, fontSize: 10, fontWeight: 600, color: '#E30613', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>↳ {sub.summary}</p>
+                  <div style={{ display: 'flex', gap: 5, marginTop: 1, alignItems: 'center' }}>
+                    <span style={{ fontSize: 9, fontFamily: 'monospace', fontWeight: 700, color: '#E30613' }}>{sub.key}</span>
+                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: STATUS_COLORS[sub.status] || '#9CA3AF', display: 'inline-block' }} />
+                  </div>
+                </div>
+                <button onClick={() => onAdd(sub)} disabled={subAdded} style={{ flexShrink: 0, fontSize: 9, border: `1px solid ${subAdded ? '#D4AF37' : '#DCDEE0'}`, borderRadius: 3, padding: '2px 6px', background: subAdded ? '#FFFDF0' : '#fff', color: subAdded ? '#856404' : '#E30613', cursor: subAdded ? 'default' : 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  {subAdded ? "✓" : "+ Agregar"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function MobileDrawer({ open, onClose, projects, loadingProjects, rows, onAdd }: {
   open: boolean; onClose: () => void;
@@ -399,7 +479,8 @@ export default function Dashboard() {
   const fetchUser = async () => { const res = await fetch("/api/auth/me"); if (res.status === 401) { setSessionExpired(true); return; } if (res.ok) { const data = await res.json(); setUser(data.user); } };
   const fetchProjects = async () => { setLoadingProjects(true); const res = await fetch("/api/jira/issues"); if (res.ok) { const data = await res.json(); setProjects(data.projects || []); } setLoadingProjects(false); };
   const fetchIssues = async (pk: string) => { setLoadingIssues(true); const res = await fetch(`/api/jira/issues?project=${pk}${incluirFinalizadas ? '&includeDone=true' : ''}`); if (res.ok) { const data = await res.json(); const allIssues = data.issues || []; const parentKeys = new Set(allIssues.map((i: any) => i.parentKey).filter(Boolean));
-const sinPadresIntermedios = allIssues.filter((i: any) => i.issueType !== 'Epic' && i.issueType !== 'Subtarea' && i.issueType !== 'Sub-task' && !parentKeys.has(i.key)); setIssues(incluirFinalizadas ? sinPadresIntermedios : sinPadresIntermedios.filter((i: any) => i.parentStatusCategory !== 'done')); } setLoadingIssues(false); };
+const sinEpicas = allIssues.filter((i: any) => i.issueType !== 'Epic');
+setIssues(incluirFinalizadas ? sinEpicas : sinEpicas.filter((i: any) => i.parentStatusCategory !== 'done')); } setLoadingIssues(false); };
   const fetchData = async () => {
     const periodDays = viewMode === '30' ? getLastNDays(30) : viewMode === '60' ? getLastNDays(60) : getWeekDays(refDate, viewMode === 'twoWeeks');
     setLoading(true); setSaveSuccess(false); setSaveError("");
