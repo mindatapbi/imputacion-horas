@@ -11,7 +11,9 @@ interface Issue {
   sociedad: string | null;
 }
 interface WorklogCell {
-  worklogId: string | null; seconds: number; raw: string; comment: string; dirty: boolean;
+  worklogId: string | null;
+  worklogIds: { id: string; seconds: number }[];
+  seconds: number; raw: string; comment: string; dirty: boolean;
 }
 interface RowEntry {
   issue: Issue; cells: Record<string, WorklogCell>;
@@ -495,8 +497,8 @@ setIssues(incluirFinalizadas ? sinEpicas : sinEpicas.filter((i: any) => i.parent
         issueMap[entry.issueKey] = { issue: { key: entry.issueKey, summary: entry.issueSummary, status: entry.status || "", project: entry.project, projectKey: entry.projectKey, issueType: entry.issueType, parentKey: entry.parentKey, parentSummary: entry.parentSummary, parentStatusCategory: null, sociedad: null }, cells: {} };
       }
       const existing = issueMap[entry.issueKey].cells[entry.date];
-      if (existing) { existing.seconds += entry.timeSpentSeconds; existing.raw = secsToDisplay(existing.seconds); }
-      else { issueMap[entry.issueKey].cells[entry.date] = { worklogId: entry.worklogId, seconds: entry.timeSpentSeconds, raw: secsToDisplay(entry.timeSpentSeconds), comment: entry.comment || "", dirty: false }; }
+      if (existing) { existing.seconds += entry.timeSpentSeconds; existing.raw = secsToDisplay(existing.seconds); existing.worklogIds.push({ id: entry.worklogId, seconds: entry.timeSpentSeconds }); }
+      else { issueMap[entry.issueKey].cells[entry.date] = { worklogId: entry.worklogId, worklogIds: [{ id: entry.worklogId, seconds: entry.timeSpentSeconds }], seconds: entry.timeSpentSeconds, raw: secsToDisplay(entry.timeSpentSeconds), comment: entry.comment || "", dirty: false }; }
     }
     setRows(Object.values(issueMap).map(v => ({ issue: v.issue, cells: v.cells })));
     setLoading(false);
@@ -506,21 +508,44 @@ setIssues(incluirFinalizadas ? sinEpicas : sinEpicas.filter((i: any) => i.parent
   const removeRow = (key: string) => setRows(prev => prev.filter(r => r.issue.key !== key));
   const updateCell = (issueKey: string, date: string, raw: string) => {
     const seconds = parseToSeconds(raw);
-    setRows(prev => prev.map(r => { if (r.issue.key !== issueKey) return r; const existing = r.cells[date]; return { ...r, cells: { ...r.cells, [date]: { worklogId: existing?.worklogId || null, seconds, raw, comment: existing?.comment || "", dirty: true } } }; }));
+    setRows(prev => prev.map(r => { if (r.issue.key !== issueKey) return r; const existing = r.cells[date]; return { ...r, cells: { ...r.cells, [date]: { worklogId: existing?.worklogId || null, worklogIds: existing?.worklogIds || [], seconds, raw, comment: existing?.comment || "", dirty: true } } }; }));
     setSaveSuccess(false);
   };
   const handleSave = async () => {
     setSaving(true); setSaveError(""); setSaveSuccess(false);
     const errors: string[] = [];
     for (const row of rows) {
-      for (const [date, cell] of Object.entries(row.cells)) {
-        if (!cell.dirty) continue;
-        const hours = Math.floor(cell.seconds / 3600); const minutes = Math.floor((cell.seconds % 3600) / 60);
-        if (cell.seconds === 0 && cell.worklogId) { const res = await fetch("/api/jira/timesheet", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ issueKey: row.issue.key, worklogId: cell.worklogId }) }); if (!res.ok) errors.push(row.issue.key); }
-        else if (cell.seconds > 0 && cell.worklogId) { const res = await fetch("/api/jira/timesheet", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ issueKey: row.issue.key, worklogId: cell.worklogId, hours, minutes, comment: cell.comment, date }) }); if (!res.ok) errors.push(row.issue.key); }
-        else if (cell.seconds > 0 && !cell.worklogId) { const res = await fetch("/api/jira/worklog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries: [{ issueKey: row.issue.key, hours, minutes, comment: cell.comment, date }] }) }); const d = await res.json(); if (d.errors?.length > 0) errors.push(row.issue.key); }
+  for (const [date, cell] of Object.entries(row.cells)) {
+    if (!cell.dirty) continue;
+    const hours = Math.floor(cell.seconds / 3600);
+    const minutes = Math.floor((cell.seconds % 3600) / 60);
+
+    if (cell.seconds === 0) {
+      // Eliminar todos los worklogs existentes
+      for (const { id } of cell.worklogIds) {
+        const res = await fetch("/api/jira/timesheet", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ issueKey: row.issue.key, worklogId: id }) });
+        if (!res.ok) errors.push(row.issue.key);
       }
+    } else if (cell.worklogIds.length > 1) {
+      // Múltiples worklogs — actualizar el primero con el total y borrar el resto
+      const [first, ...rest] = cell.worklogIds;
+      const res = await fetch("/api/jira/timesheet", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ issueKey: row.issue.key, worklogId: first.id, hours, minutes, comment: cell.comment, date }) });
+      if (!res.ok) errors.push(row.issue.key);
+      for (const { id } of rest) {
+        await fetch("/api/jira/timesheet", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ issueKey: row.issue.key, worklogId: id }) });
+      }
+    } else if (cell.worklogIds.length === 1) {
+      // Un solo worklog — actualizar
+      const res = await fetch("/api/jira/timesheet", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ issueKey: row.issue.key, worklogId: cell.worklogIds[0].id, hours, minutes, comment: cell.comment, date }) });
+      if (!res.ok) errors.push(row.issue.key);
+    } else {
+      // Sin worklog — crear nuevo
+      const res = await fetch("/api/jira/worklog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries: [{ issueKey: row.issue.key, hours, minutes, comment: cell.comment, date }] }) });
+      const d = await res.json();
+      if (d.errors?.length > 0) errors.push(row.issue.key);
     }
+  }
+}
     if (errors.length > 0) setSaveError(`No se pudieron guardar: ${[...new Set(errors)].join(", ")}`);
     else { setSaveSuccess(true); await fetchData(); }
     setSaving(false);
@@ -529,7 +554,7 @@ setIssues(incluirFinalizadas ? sinEpicas : sinEpicas.filter((i: any) => i.parent
     const existing = rows.find(r => r.issue.key === ticketKey);
     const newSecs = (existing?.cells[today]?.seconds || 0) + seconds;
     if (existing) { updateCell(ticketKey, today, secsToDisplay(newSecs)); }
-    else { fetch(`/api/jira/issues?q=${encodeURIComponent(ticketKey)}`).then(r => r.json()).then(data => { const issue = data.issues?.[0]; if (issue) setRows(prev => [...prev, { issue, cells: { [today]: { worklogId: null, seconds: newSecs, raw: secsToDisplay(newSecs), comment: "", dirty: true } } }]); }); }
+    else { fetch(`/api/jira/issues?q=${encodeURIComponent(ticketKey)}`).then(r => r.json()).then(data => { const issue = data.issues?.[0]; if (issue) setRows(prev => [...prev, { issue, cells: { [today]: { worklogId: null, worklogIds: [], seconds: newSecs, raw: secsToDisplay(newSecs), comment: "", dirty: true } } }]); }); }
     setActiveTimerTicket(null);
   };
 
