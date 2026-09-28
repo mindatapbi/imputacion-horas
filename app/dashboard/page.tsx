@@ -89,6 +89,12 @@ function fmtDayLabel(d: string): string {
 }
 
 function groupIssues(issues: Issue[]): IssueGroup[] {
+  console.log("Total issues recibidos:", issues.length);
+  console.log("Issues con parentKey:", issues.filter(i => i.parentKey).length);
+  console.log("Issues sin parentSummary:", issues.filter(i => i.parentKey && !i.parentSummary).length);
+
+
+
   const g: Record<string, IssueGroup> = {};
   const taskMap: Record<string, Issue> = {};
 
