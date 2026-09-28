@@ -92,7 +92,8 @@ function groupIssues(issues: Issue[]): IssueGroup[] {
   console.log("Total issues recibidos:", issues.length);
   console.log("Issues con parentKey:", issues.filter(i => i.parentKey).length);
   console.log("Issues sin parentSummary:", issues.filter(i => i.parentKey && !i.parentSummary).length);
-
+  console.log("parentKeys únicos:", [...new Set(issues.map(i => i.parentKey))]);
+  console.log("issueTypes únicos:", [...new Set(issues.map(i => i.issueType))]);
 
 
   const g: Record<string, IssueGroup> = {};
