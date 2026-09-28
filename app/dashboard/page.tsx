@@ -94,7 +94,8 @@ function groupIssues(issues: Issue[]): IssueGroup[] {
   console.log("Issues sin parentSummary:", issues.filter(i => i.parentKey && !i.parentSummary).length);
   console.log("parentKeys únicos:", [...new Set(issues.map(i => i.parentKey))]);
   console.log("issueTypes únicos:", [...new Set(issues.map(i => i.issueType))]);
-
+  console.log("Tareas de JRH-619:", issues.filter(i => i.parentKey === 'JRH-619').length);
+  console.log("Tareas de JRH-619 detalle:", issues.filter(i => i.parentKey === 'JRH-619').map(i => i.key));
 
   const g: Record<string, IssueGroup> = {};
   const taskMap: Record<string, Issue> = {};
