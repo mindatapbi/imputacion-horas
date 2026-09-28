@@ -1,4 +1,3 @@
-// 
 import { NextRequest, NextResponse } from "next/server";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
@@ -52,10 +51,11 @@ export async function GET(request: NextRequest) {
     // ── TICKETS POR PROYECTO ───────────────────────────────────────────────
     const includeDone = searchParams.get("includeDone") === "true";
     const jql = encodeURIComponent(`project = "${projectKey}"${!includeDone ? ' AND statusCategory != Done' : ''} ORDER BY issuetype ASC, updated DESC`);
-    const url = `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,status,project,issuetype,parent,assignee,customfield_10177&maxResults=100&expand=names`;
+    const url = `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,status,project,issuetype,parent,assignee,customfield_10177&maxResults=200&expand=names`;
     const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
     const data = await response.json();
-    const issues = data.issues?.map((issue: any) => ({
+
+    const issues: any[] = data.issues?.map((issue: any) => ({
       key: issue.key,
       summary: issue.fields.summary,
       status: issue.fields.status?.name,
@@ -68,6 +68,32 @@ export async function GET(request: NextRequest) {
       parentStatusCategory: issue.fields.parent?.fields?.status?.statusCategory?.key || null,
       sociedad: issue.fields.customfield_10177?.value || null,
     })) || [];
+
+    // ── ENRIQUECER parentSummary con segunda query ─────────────────────────
+    const parentKeys = [...new Set(
+      issues
+        .filter(i => i.parentKey && !i.parentSummary)
+        .map(i => i.parentKey)
+    )];
+
+    if (parentKeys.length > 0) {
+      const parentJql = encodeURIComponent(`key in (${parentKeys.join(",")})`);
+      const parentUrl = `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${parentJql}&fields=summary,issuetype&maxResults=50`;
+      const parentResp = await fetch(parentUrl, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
+      const parentData = await parentResp.json();
+
+      const parentMap: Record<string, string> = {};
+      for (const p of parentData.issues || []) {
+        parentMap[p.key] = p.fields.summary;
+      }
+
+      for (const issue of issues) {
+        if (issue.parentKey && parentMap[issue.parentKey]) {
+          issue.parentSummary = parentMap[issue.parentKey];
+        }
+      }
+    }
+
     return NextResponse.json({ issues });
 
   } catch (error) {

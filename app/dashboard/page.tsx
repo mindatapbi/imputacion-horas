@@ -87,6 +87,7 @@ function fmtWeekLabel(days: string[]): string {
 function fmtDayLabel(d: string): string {
   return new Date(d + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
 }
+
 function groupIssues(issues: Issue[]): IssueGroup[] {
   const g: Record<string, IssueGroup> = {};
   const taskMap: Record<string, Issue> = {};
@@ -101,8 +102,12 @@ function groupIssues(issues: Issue[]): IssueGroup[] {
   // Agrupamos por épica
   for (const i of issues) {
     if (i.issueType === 'Sub-task' || i.issueType === 'Subtarea') continue;
-    const epicKey = i.parentKey && i.parentSummary ? i.parentKey! : "__none__";
-    if (!g[epicKey]) g[epicKey] = { parentKey: epicKey !== "__none__" ? i.parentKey : null, parentSummary: epicKey !== "__none__" ? i.parentSummary : null, tasks: [] };
+    const epicKey = i.parentKey ?? "__none__";
+    if (!g[epicKey]) g[epicKey] = {
+      parentKey: i.parentKey ?? null,
+      parentSummary: i.parentSummary ?? i.parentKey ?? null,
+      tasks: []
+    };
     g[epicKey].tasks.push({ task: i, subtasks: [] });
   }
 
@@ -113,15 +118,19 @@ function groupIssues(issues: Issue[]): IssueGroup[] {
     if (!parentTask) continue;
     const parentIssue = taskMap[parentTask];
     if (!parentIssue) continue;
-    const epicKey = parentIssue.parentKey && parentIssue.parentSummary ? parentIssue.parentKey! : "__none__";
+    const epicKey = parentIssue.parentKey ?? "__none__";
     const epicGroup = g[epicKey];
     if (!epicGroup) continue;
     const taskWithSubs = epicGroup.tasks.find(t => t.task.key === parentTask);
     if (taskWithSubs) taskWithSubs.subtasks.push(i);
   }
 
-  return Object.values(g).sort((a, b) => a.parentKey === null ? 1 : b.parentKey === null ? -1 : (a.parentKey || "").localeCompare(b.parentKey || ""));
+  return Object.values(g).sort((a, b) =>
+    a.parentKey === null ? 1 : b.parentKey === null ? -1 : (a.parentKey || "").localeCompare(b.parentKey || "")
+  );
 }
+
+
 
 const DAY_LABELS = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
 const JORNADA_SEMANAL = 40 * 3600;
