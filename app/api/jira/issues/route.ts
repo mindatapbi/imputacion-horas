@@ -48,14 +48,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ projects });
     }
 
-    // ── TICKETS POR PROYECTO ───────────────────────────────────────────────
+    // ── TICKETS POR PROYECTO (con paginación) ─────────────────────────────
     const includeDone = searchParams.get("includeDone") === "true";
-    const jql = encodeURIComponent(`project = "${projectKey}"${!includeDone ? ' AND statusCategory != Done' : ''} ORDER BY issuetype ASC, updated DESC`);
-    const url = `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${jql}&fields=summary,status,project,issuetype,parent,assignee,customfield_10177&maxResults=200&expand=names`;
-    const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
-    const data = await response.json();
+    const baseJql = `project = "${projectKey}"${!includeDone ? ' AND statusCategory != Done' : ''} ORDER BY issuetype ASC, updated DESC`;
+    const fields = "summary,status,project,issuetype,parent,assignee,customfield_10177";
 
-    const issues: any[] = data.issues?.map((issue: any) => ({
+    let allIssues: any[] = [];
+    let pageToken: string | null = null;
+    const PAGE_SIZE = 100;
+    const MAX_PAGES = 10;
+    let page = 0;
+
+    while (page < MAX_PAGES) {
+      const url: string = `https://api.atlassian.com/ex/jira/${session.cloudId}/rest/api/3/search/jql?jql=${encodeURIComponent(baseJql)}&fields=${fields}&maxResults=${PAGE_SIZE}&expand=names${pageToken ? `&nextPageToken=${pageToken}` : ""}`;
+      const response: Response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
+      const data: any = await response.json();
+
+      allIssues = [...allIssues, ...(data.issues || [])];
+
+      if (data.isLast || !data.nextPageToken) break;
+      pageToken = data.nextPageToken;
+      page++;
+    }
+
+    const issues: any[] = allIssues.map((issue: any) => ({
       key: issue.key,
       summary: issue.fields.summary,
       status: issue.fields.status?.name,
@@ -67,7 +83,7 @@ export async function GET(request: NextRequest) {
       parentSummary: issue.fields.parent?.fields?.summary || null,
       parentStatusCategory: issue.fields.parent?.fields?.status?.statusCategory?.key || null,
       sociedad: issue.fields.customfield_10177?.value || null,
-    })) || [];
+    }));
 
     // ── ENRIQUECER parentSummary con segunda query ─────────────────────────
     const parentKeys = [...new Set(
