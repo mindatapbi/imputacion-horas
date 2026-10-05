@@ -577,7 +577,7 @@ setIssues(incluirFinalizadas ? sinEpicas : sinEpicas.filter((i: any) => i.parent
 
   const dayTotals: Record<string, number> = {};
   let periodTotal = 0;
-  const currentWeekDays = getWeekDays(refDate, false);
+   const currentWeekDays = getWeekDays(refDate, false);
   for (const day of days) {
     dayTotals[day] = rows.reduce((acc, r) => acc + (r.cells[day]?.seconds || 0), 0);
     if (currentWeekDays.includes(day)) periodTotal += dayTotals[day];
@@ -836,7 +836,7 @@ setIssues(incluirFinalizadas ? sinEpicas : sinEpicas.filter((i: any) => i.parent
                         </td>;
                       })}
                       <td style={{ textAlign: 'center', padding: '8px', borderLeft: '1px solid rgba(255,255,255,0.08)', background: '#1C1C1C' }}>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{secsToDisplay(periodTotal) || '0h'}</span>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{secsToDisplay(days.reduce((acc, d) => acc + (dayTotals[d] || 0), 0)) || '0h'}</span>
                       </td>
                       <td style={{ borderLeft: '1px solid rgba(255,255,255,0.08)' }}></td>
                     </tr>
