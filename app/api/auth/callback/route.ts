@@ -5,9 +5,10 @@ import { SessionData, sessionOptions } from "@/lib/session";
 import { saveToken } from "@/lib/redis";
 
 export async function GET(request: NextRequest) {
+  const BASE_URL = process.env.ATLASSIAN_CALLBACK_URL ? new URL(process.env.ATLASSIAN_CALLBACK_URL).origin : new URL(request.url).origin;
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
-  if (!code) return NextResponse.redirect(new URL("/?error=no_code", request.url));
+  if (!code) return NextResponse.redirect(new URL("/?error=no_code", BASE_URL));
 
   try {
     const tokenResponse = await fetch("https://auth.atlassian.com/oauth/token", {
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
     });
 
     const tokenData = await tokenResponse.json();
-    if (!tokenData.access_token) return NextResponse.redirect(new URL("/?error=token_failed", request.url));
+    if (!tokenData.access_token) return NextResponse.redirect(new URL("/?error=token_failed", BASE_URL));
 
     const resourcesResponse = await fetch(
       "https://api.atlassian.com/oauth/token/accessible-resources",
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
     const allowedCloudId = process.env.ATLASSIAN_CLOUD_ID;
     if (cloudId !== allowedCloudId) {
       return NextResponse.redirect(
-        new URL(`/?error=wrong_site&site=${encodeURIComponent(siteName || '')}`, request.url)
+        new URL(`/?error=wrong_site&site=${encodeURIComponent(siteName || '')}`, BASE_URL)
       );
     }
 
@@ -60,9 +61,9 @@ export async function GET(request: NextRequest) {
     };
     await session.save();
 
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return NextResponse.redirect(new URL("/dashboard", BASE_URL));
   } catch (error) {
     console.error("Auth error:", error);
-    return NextResponse.redirect(new URL("/?error=auth_failed", request.url));
+    return NextResponse.redirect(new URL("/?error=auth_failed", BASE_URL));
   }
 }
