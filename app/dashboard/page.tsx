@@ -170,7 +170,7 @@ function ProjectSelector({ projects, value, onChange }: { projects: Project[]; v
   );
 }
 
-function EpicGroup({ group, onAdd, rows }: { group: IssueGroup; onAdd: (i: Issue) => void; rows: RowEntry[] }) {
+function EpicGroup({ group, onAdd, rows, onAddAll }: { group: IssueGroup; onAdd: (i: Issue) => void; rows: RowEntry[]; onAddAll?: (list: Issue[]) => void }) {
   const [collapsed, setCollapsed] = useState(true);
   const isEpic = !!group.parentKey;
   const totalIssues = group.tasks.reduce((acc, t) => acc + 1 + t.subtasks.length, 0);
@@ -190,6 +190,11 @@ function EpicGroup({ group, onAdd, rows }: { group: IssueGroup; onAdd: (i: Issue
         <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 99, background: addedCount > 0 ? '#FBEEEE' : '#F3F4F6', color: addedCount > 0 ? '#E30613' : '#6B6B6B', flexShrink: 0 }}>
           {addedCount > 0 ? `${addedCount}/` : ""}{totalIssues}
         </span>
+        {onAddAll && (addedCount >= totalIssues
+          ? <span title="Todas agregadas" style={{ fontSize: 11, color: '#856404', fontWeight: 700, width: 20, textAlign: 'center', flexShrink: 0 }}>✓</span>
+          : <span role="button" title="Agregar todas las tareas de esta épica"
+              onClick={e => { e.stopPropagation(); onAddAll(group.tasks.flatMap(t => [t.task, ...t.subtasks])); }}
+              style={{ fontSize: 12, fontWeight: 700, color: '#E30613', border: '1px solid #E30613', background: '#fff', borderRadius: 3, width: 20, lineHeight: '16px', textAlign: 'center', flexShrink: 0, cursor: 'pointer' }}>+</span>)}
       </button>
 
       {/* TASKS y SUBTAREAS */}
@@ -522,6 +527,22 @@ setIssues(incluirFinalizadas ? sinEpicas : sinEpicas.filter((i: any) => i.parent
   };
 
   const addIssue = (issue: Issue) => { if (rows.find(r => r.issue.key === issue.key)) return; setRows(prev => [...prev, { issue, cells: {} }]); };
+  const goToRow = (key: string) => {
+    const tr = document.getElementById(`row-${key}`);
+    if (!tr) return;
+    tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    tr.style.transition = 'box-shadow 0.3s'; tr.style.boxShadow = 'inset 0 0 0 2px #E30613';
+    setTimeout(() => { tr.style.boxShadow = 'none'; }, 1800);
+    const input = tr.querySelector<HTMLInputElement>(`input[data-day="${today}"]`);
+    if (input) setTimeout(() => input.focus({ preventScroll: true }), 400);
+  };
+  const addMany = (list: Issue[]) => {
+    const existing = new Set(rows.map(r => r.issue.key));
+    const nuevos = list.filter(i => !existing.has(i.key));
+    if (nuevos.length === 0) return;
+    if (nuevos.length > 40 && !confirm(`¿Agregar ${nuevos.length} tareas a la tabla?`)) return;
+    setRows(prev => [...prev, ...nuevos.map(issue => ({ issue, cells: {} }))]);
+  };
   const removeRow = (key: string) => setRows(prev => prev.filter(r => r.issue.key !== key));
   const updateCell = (issueKey: string, date: string, raw: string) => {
     const seconds = parseToSeconds(raw);
@@ -584,6 +605,11 @@ setIssues(incluirFinalizadas ? sinEpicas : sinEpicas.filter((i: any) => i.parent
   }
   const rowTotals: Record<string, number> = {};
   for (const row of rows) rowTotals[row.issue.key] = days.reduce((acc, d) => acc + (row.cells[d]?.seconds || 0), 0);
+  const sortedRows = [...rows].sort((a, b) =>
+    (a.issue.parentSummary || '\uffff').localeCompare(b.issue.parentSummary || '\uffff') ||
+    (a.issue.project || '').localeCompare(b.issue.project || '') ||
+    a.issue.key.localeCompare(b.issue.key, undefined, { numeric: true })
+  );
   const prevWeek = () => { const d = new Date(refDate); d.setDate(d.getDate() - 7); setRefDate(d); };
   const nextWeek = () => { const d = new Date(refDate); d.setDate(d.getDate() + 7); setRefDate(d); };
   const isWeekend = (d: string) => { const dow = new Date(d + "T12:00:00").getDay(); return dow === 0 || dow === 6; };
@@ -677,13 +703,25 @@ setIssues(incluirFinalizadas ? sinEpicas : sinEpicas.filter((i: any) => i.parent
                   ))}
                 </select>
               </div>
+              {(() => {
+                const pendientes = filteredIssues.filter(i => !rows.some(r => r.issue.key === i.key)).length;
+                const todas = pendientes === 0;
+                return (
+                  <div style={{ padding: '8px 10px', borderBottom: '1px solid #DCDEE0' }}>
+                    <button onClick={() => addMany(filteredIssues)} disabled={todas || filteredIssues.length === 0}
+                      style={{ width: '100%', padding: '6px 8px', borderRadius: 3, fontSize: 11, fontWeight: 700, cursor: todas ? 'default' : 'pointer', border: `1px solid ${todas ? '#D4AF37' : '#E30613'}`, background: todas ? '#FFFDF0' : '#fff', color: todas ? '#856404' : '#E30613' }}>
+                      {todas ? '✓ Todas agregadas' : `+ Agregar todas (${pendientes})`}
+                    </button>
+                  </div>
+                );
+              })()}
             </>
           )} 
           <div style={{ flex: 1, overflowY: 'auto', padding: 10 }}>
             {loadingIssues ? <div style={{ textAlign: 'center', padding: '20px 0', fontSize: 12, color: '#6B6B6B' }}>Cargando...</div>
               : !selectedProject ? <div style={{ textAlign: 'center', padding: '24px 0' }}><div style={{ fontSize: 28, marginBottom: 6 }}>📁</div><p style={{ fontSize: 12, color: '#9CA3AF', margin: 0 }}>Elegí un proyecto</p></div>
               : filteredIssues.length === 0 ? <p style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'center', padding: '16px 0' }}>Sin tickets activos</p>
-              : groups.map(g => <EpicGroup key={g.parentKey || "__none__"} group={g} onAdd={addIssue} rows={rows} />)}
+              : groups.map(g => <EpicGroup key={g.parentKey || "__none__"} group={g} onAdd={addIssue} rows={rows} onAddAll={addMany} />)}
           </div>
         </div>
 
@@ -738,9 +776,9 @@ setIssues(incluirFinalizadas ? sinEpicas : sinEpicas.filter((i: any) => i.parent
                             <p style={{ margin: '2px 0 0', fontSize: 12, color: '#1C1C1C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.summary}</p>
                             {issue.parentSummary && <span style={{ fontSize: 10, color: '#6B6B6B' }}>⚡ {issue.parentSummary}</span>}
                           </div>
-                          <button onClick={() => { addIssue(issue); setGlobalSearch(""); setShowGlobalResults(false); }} disabled={added}
-                            style={{ flexShrink: 0, fontSize: 11, border: `1px solid ${added ? '#D4AF37' : '#DCDEE0'}`, borderRadius: 3, padding: '3px 10px', background: added ? '#FFFDF0' : '#fff', color: added ? '#856404' : '#E30613', cursor: added ? 'default' : 'pointer', fontWeight: 700 }}>
-                            {added ? '✓' : '+ Agregar'}
+                          <button onClick={() => { if (added) goToRow(issue.key); else addIssue(issue); setGlobalSearch(""); setShowGlobalResults(false); }}
+                            style={{ flexShrink: 0, fontSize: 11, border: `1px solid ${added ? '#D4AF37' : '#DCDEE0'}`, borderRadius: 3, padding: '3px 10px', background: added ? '#FFFDF0' : '#fff', color: added ? '#856404' : '#E30613', cursor: 'pointer', fontWeight: 700 }}>
+                            {added ? '✓ Ir a la fila' : '+ Agregar'}
                           </button>
                         </div>
                       );
@@ -779,12 +817,12 @@ setIssues(incluirFinalizadas ? sinEpicas : sinEpicas.filter((i: any) => i.parent
                       <p style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>No hay registros en este período</p>
                       <p style={{ margin: '4px 0 0', fontSize: 12 }}>Elegí un proyecto en el panel izquierdo y agregá tickets</p>
                     </td></tr>
-                  ) : rows.map((row, ri) => {
+                  ) : sortedRows.map((row, ri) => {
                     const ts = ISSUE_TYPE_STYLES[row.issue.issueType] || { emoji: "📄", color: "#9CA3AF" };
                     const rowTotal = rowTotals[row.issue.key] || 0;
                     const hasDirty = Object.values(row.cells).some(c => c.dirty);
                     return (
-                      <tr key={row.issue.key} style={{ borderBottom: '1px solid #F0F0F0', background: ri % 2 === 0 ? '#fff' : '#FAFAFA' }}>
+                      <tr key={row.issue.key} id={`row-${row.issue.key}`} style={{ borderBottom: '1px solid #F0F0F0', background: ri % 2 === 0 ? '#fff' : '#FAFAFA' }}>
                         <td style={{ padding: '8px 14px', position: 'sticky', left: 0, background: ri % 2 === 0 ? '#fff' : '#FAFAFA', zIndex: 5, borderRight: '1px solid #F0F0F0' }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
                             {hasDirty && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#E30613', flexShrink: 0, marginTop: 5 }} />}
@@ -808,7 +846,7 @@ setIssues(incluirFinalizadas ? sinEpicas : sinEpicas.filter((i: any) => i.parent
                             <td key={d} style={{ padding: '4px 2px', textAlign: 'center', borderLeft: '1px solid #F0F0F0', background: we ? '#F5F5F5' : d === today ? '#FFF9F0' : 'transparent', position: 'relative' }}>
                               {we ? <span style={{ color: '#DCDEE0', fontSize: 11 }}>—</span> : (
                                 <>
-                                  <input type="text" value={raw} onChange={e => updateCell(row.issue.key, d, e.target.value)} onBlur={e => { const s = parseToSeconds(e.target.value); updateCell(row.issue.key, d, s > 0 ? secsToDisplay(s) : ""); }} placeholder="—"
+                                  <input type="text" data-day={d} value={raw} onChange={e => updateCell(row.issue.key, d, e.target.value)} onBlur={e => { const s = parseToSeconds(e.target.value); updateCell(row.issue.key, d, s > 0 ? secsToDisplay(s) : ""); }} placeholder="—"
                                     style={{ width: '100%', textAlign: 'center', border: secs > 0 ? `1px solid ${isDirty ? 'rgba(212,175,55,0.8)' : 'rgba(212,175,55,0.3)'}` : '1px solid transparent', borderRadius: 3, padding: isExtendedView ? '4px 1px' : '5px 3px', fontSize: isExtendedView ? 11 : 13, fontWeight: secs > 0 ? 700 : 400, color: secs > 0 ? '#1C1C1C' : '#DCDEE0', background: secs > 0 ? (isDirty ? '#FFFBEB' : '#FFFDF0') : 'transparent', outline: 'none', cursor: 'text' }}
                                     onFocus={e => { e.currentTarget.style.borderColor = '#E30613'; e.currentTarget.style.background = '#FFF5F5'; }}
                                     onBlurCapture={e => { const s = parseToSeconds(e.currentTarget.value); e.currentTarget.style.borderColor = s > 0 ? 'rgba(212,175,55,0.5)' : 'transparent'; e.currentTarget.style.background = s > 0 ? '#FFFDF0' : 'transparent'; }} />
