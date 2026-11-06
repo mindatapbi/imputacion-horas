@@ -620,7 +620,10 @@ setIssues(incluirFinalizadas ? sinEpicas : sinEpicas.filter((i: any) => i.parent
     (!soloAsignadasAMi || (i as any).assigneeId === user?.accountId) &&
     (!filterSociedad || i.sociedad === filterSociedad)
   );
-  const groups = groupIssues(filteredIssues);
+  const byKey = (x: Issue, y: Issue) => x.key.localeCompare(y.key, undefined, { numeric: true });
+  const groups = groupIssues(filteredIssues)
+    .map(g => ({ ...g, tasks: [...g.tasks].sort((x, y) => byKey(x.task, y.task)).map(t => ({ ...t, subtasks: [...t.subtasks].sort(byKey) })) }))
+    .sort((a, b) => (a.parentSummary || '\uffff').localeCompare(b.parentSummary || '\uffff'));
 
   const btnStyle = (active: boolean) => ({
     fontSize: 11, padding: '5px 12px', borderRadius: 3,
